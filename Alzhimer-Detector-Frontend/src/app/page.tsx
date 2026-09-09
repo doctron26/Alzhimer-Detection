@@ -4,7 +4,7 @@ import { useRef, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { MeshGradient } from "@paper-design/shaders-react";
-import { motion, useScroll, useTransform, AnimatePresence, useSpring } from "framer-motion";
+import { motion, useScroll, useTransform, AnimatePresence, useSpring, Variants } from "framer-motion";
 import { Brain, Mic, Activity, ArrowRight, BrainCircuit, Waves, Database, Target, LayoutDashboard, ShieldCheck, Zap, UserCircle } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { User } from "@supabase/supabase-js";
@@ -15,7 +15,7 @@ const MARQUEE_ITEMS = [
   "MMSE Cognitive Mapping", "Multimodal Feature Fusion"
 ];
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
@@ -25,7 +25,7 @@ const staggerContainer = {
   }
 };
 
-const fadeUp = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } }
 };
