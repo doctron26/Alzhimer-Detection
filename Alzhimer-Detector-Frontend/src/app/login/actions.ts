@@ -17,8 +17,8 @@ export async function login(formData: FormData) {
     redirect('/login?error=Could not authenticate user')
   }
 
-  revalidatePath('/assessment', 'layout')
-  redirect('/assessment')
+  revalidatePath('/', 'layout')
+  redirect('/')
 }
 
 export async function signup(formData: FormData) {
@@ -34,6 +34,6 @@ export async function signup(formData: FormData) {
     redirect('/login?error=Could not create user')
   }
 
-  revalidatePath('/assessment', 'layout')
-  redirect('/assessment')
+  revalidatePath('/', 'layout')
+  redirect('/')
 }
