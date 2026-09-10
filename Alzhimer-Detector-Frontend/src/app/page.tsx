@@ -8,6 +8,7 @@ import { motion, useScroll, useTransform, AnimatePresence, useSpring, Variants }
 import { Brain, Mic, Activity, ArrowRight, BrainCircuit, Waves, Database, Target, LayoutDashboard, ShieldCheck, Zap, UserCircle } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { User } from "@supabase/supabase-js";
+import Chatbot from "@/components/Chatbot";
 
 const MARQUEE_ITEMS = [
   "Wav2Vec2 Acoustic Analysis", "Whisper Transcription", "BERT Linguistic Engine", 
@@ -459,6 +460,7 @@ export default function Home() {
         </motion.div>
       </section>
 
+      <Chatbot />
     </div>
   );
 }

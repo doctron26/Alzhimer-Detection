@@ -1,9 +1,13 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 import time
 import json
 import os
 import tempfile
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+load_dotenv()
 from typing import Optional
 import numpy as np
 
@@ -225,3 +229,63 @@ async def analyze_assessment(
             "reading": reading_text
         }
     }
+
+@app.post("/api/webhook")
+async def dialogflow_webhook(req: Request):
+    """
+    Webhook for Google Dialogflow to communicate with our Python backend.
+    """
+    try:
+        body = await req.json()
+        print(f"--- WEBHOOK RECEIVED ---")
+        
+        # Extract information from Dialogflow's request
+        query_result = body.get("queryResult", {})
+        intent_name = query_result.get("intent", {}).get("displayName", "")
+        user_text = query_result.get("queryText", "")
+        
+        print(f"Intent matched: {intent_name}")
+        print(f"User said: {user_text}")
+
+        # Default response if we don't catch a specific intent
+        fulfillment_text = f"I received your message in the Python backend! (Matched intent: {intent_name})"
+
+        # Custom Logic based on Intents you create in Dialogflow Console
+        if intent_name == "Check Score":
+            # Here you could look up a database. For now, we simulate it.
+            fulfillment_text = "I checked the backend. Your latest cognitive risk probability is currently calculating..."
+        
+        elif intent_name == "Start Assessment":
+            fulfillment_text = "I can definitely help with that. Please click the 'Launch Assessment' button at the top of the page to begin your cognitive analysis."
+            
+        elif intent_name == "Default Fallback Intent":
+            print("Fallback triggered. Sending to Gemini...")
+            gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+            if gemini_api_key:
+                try:
+                    import time
+                    start_time = time.time()
+                    genai.configure(api_key=gemini_api_key)
+                    model = genai.GenerativeModel("gemini-3.5-flash")
+                    prompt = f"You are a helpful medical AI specializing in Alzheimer's. A user said: '{user_text}'. Respond in exactly 1 concise sentence."
+                    response = model.generate_content(prompt)
+                    
+                    if response.parts:
+                        fulfillment_text = response.parts[0].text
+                    else:
+                        fulfillment_text = "I generated a response but it was empty."
+                    print(f"Gemini responded in {time.time() - start_time:.2f} seconds")
+                except Exception as e:
+                    print(f"Gemini error: {e}")
+                    fulfillment_text = f"I tried to think about that, but my AI brain encountered an error: {str(e)}"
+            else:
+                fulfillment_text = "I'm a smart AI, but my Gemini API key is missing from the backend!"
+
+        return {
+            "fulfillmentText": fulfillment_text
+        }
+        
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return {"fulfillmentText": "Sorry, the Python backend encountered an error while processing that."}
+
