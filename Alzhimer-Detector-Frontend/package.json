@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google-cloud/dialogflow": "^8.1.0",
+    "@google/generative-ai": "^0.24.1",
     "@paper-design/shaders-react": "^0.0.80",
     "@supabase/ssr": "^0.12.6",
     "@supabase/supabase-js": "^2.116.0",

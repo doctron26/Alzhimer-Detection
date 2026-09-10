@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import dialogflow from "@google-cloud/dialogflow";
-import { v4 as uuidv4 } from "uuid";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// We keep a session ID in memory for simple demonstration.
-// In a real app, this should be stored in a secure cookie or passed from the client.
-let sessionId = uuidv4();
+// Initialize the Gemini API client
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export async function POST(req: Request) {
   try {
@@ -14,55 +12,34 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
 
-    const projectId = process.env.GOOGLE_PROJECT_ID;
-    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-    let privateKey = process.env.GOOGLE_PRIVATE_KEY || "";
-    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-      privateKey = privateKey.slice(1, -1);
-    }
-    privateKey = privateKey.replace(/\\n/g, "\n");
-    const languageCode = process.env.DIALOGFLOW_LANGUAGE_CODE || "en-US";
-
-    if (!projectId || !clientEmail || !privateKey) {
-      console.warn("Dialogflow credentials missing in .env.local");
+    if (!process.env.GEMINI_API_KEY) {
+      console.warn("Gemini API key missing in .env.local");
       return NextResponse.json(
-        { reply: "I'm sorry, my AI brain is currently disconnected. Please configure the Dialogflow credentials." },
+        { reply: "I'm sorry, my AI brain is currently disconnected. Please configure the Gemini API key." },
         { status: 200 }
       );
     }
 
-    // Initialize Dialogflow client
-    const sessionClient = new dialogflow.SessionsClient({
-      credentials: {
-        client_email: clientEmail,
-        private_key: privateKey,
-      },
-      projectId: projectId,
-    });
+    // Initialize the model (using gemini-3.5-flash for fast chat responses)
+    const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 
-    const sessionPath = sessionClient.projectAgentSessionPath(projectId, sessionId);
+    // System instructions to maintain the bot's persona and context
+    const prompt = `You are AlzDetect AI, a helpful medical AI assistant specializing in Alzheimer's.
+If the user asks about their score, tell them it's calculating.
+If they want to start an assessment, tell them to click the Launch Assessment button at the top of the page to begin.
+Keep your responses concise, empathetic, and under 2-3 sentences. Do not use markdown styling.
+User says: "${message}"`;
 
-    const request = {
-      session: sessionPath,
-      queryInput: {
-        text: {
-          text: message,
-          languageCode: languageCode,
-        },
-      },
-    };
+    // Generate response from Gemini
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
 
-    // Send request to Dialogflow
-    const [response] = await sessionClient.detectIntent(request);
-    
-    if (response.queryResult) {
-      const result = response.queryResult;
-      return NextResponse.json({ reply: result.fulfillmentText });
-    } else {
-      return NextResponse.json({ reply: "I'm sorry, I didn't understand that." });
-    }
+    return NextResponse.json({ reply: responseText });
   } catch (error: any) {
-    console.error("Dialogflow error:", error);
-    return NextResponse.json({ error: "Failed to process chat", details: error?.message || String(error) }, { status: 500 });
+    console.error("Gemini API error:", error);
+    return NextResponse.json(
+      { error: "Failed to process chat", details: error?.message || String(error) },
+      { status: 500 }
+    );
   }
 }

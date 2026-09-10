@@ -14,7 +14,8 @@ export async function POST(request: Request) {
     console.log("Written Data Payload length:", writtenData ? writtenData.length : 0);
     
     // Forwarding the data to the Python backend
-    const pythonBackendResponse = await fetch("http://127.0.0.1:8000/api/analyze", {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const pythonBackendResponse = await fetch(`${backendUrl}/api/analyze`, {
       method: "POST",
       body: formData, // Forwarding the form data directly
     });
