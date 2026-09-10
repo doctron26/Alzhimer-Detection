@@ -4,7 +4,8 @@ import time
 import json
 import os
 import tempfile
-import google.generativeai as genai
+import gc
+from google import genai
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,9 +25,8 @@ except ImportError:
 
 try:
     import spacy
-    nlp = spacy.load("en_core_web_sm")
 except Exception:
-    nlp = None
+    spacy = None
 
 app = FastAPI(title="Alzheimer's Detector ML API - Phase 4")
 
@@ -39,16 +39,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize ML Pipelines
-print("Loading ML Models (Whisper and BERT)...")
-try:
-    whisper_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny")
-    bert_pipe = pipeline("feature-extraction", model="distilbert-base-uncased")
-    print("Models loaded successfully!")
-except Exception as e:
-    print(f"Error loading models: {e}")
-    whisper_pipe = None
-    bert_pipe = None
+# Removed global initialization of ML Pipelines to save memory.
+# Models will be lazily loaded in the endpoints as needed.
 
 def extract_acoustic_features(audio_path):
     if not librosa:
@@ -78,14 +70,21 @@ def extract_acoustic_features(audio_path):
         return {"pitch_variance": 80, "speech_rate": 70, "pauses": 85, "jitter": 75, "shimmer": 80}
 
 def calculate_idea_density(text):
-    if not nlp or not text:
+    if not spacy or not text:
         return 50 # Fallback
-    doc = nlp(text)
-    # Count distinct ideas (nouns, verbs, adjectives, adverbs)
-    ideas = [token.text for token in doc if token.pos_ in ['NOUN', 'VERB', 'ADJ', 'ADV']]
-    words = [token.text for token in doc if not token.is_punct]
-    density = (len(ideas) / len(words)) * 100 if len(words) > 0 else 0
-    return min(100, density * 1.5) # Scale up slightly for 0-100 score
+    try:
+        nlp = spacy.load("en_core_web_sm")
+        doc = nlp(text)
+        # Count distinct ideas (nouns, verbs, adjectives, adverbs)
+        ideas = [token.text for token in doc if token.pos_ in ['NOUN', 'VERB', 'ADJ', 'ADV']]
+        words = [token.text for token in doc if not token.is_punct]
+        density = (len(ideas) / len(words)) * 100 if len(words) > 0 else 0
+        del nlp
+        gc.collect()
+        return min(100, density * 1.5) # Scale up slightly for 0-100 score
+    except Exception as e:
+        print(f"Spacy error: {e}")
+        return 50
 
 @app.get("/")
 def read_root():
@@ -116,12 +115,15 @@ async def analyze_assessment(
     # 1. Paragraph Reading (Acoustic and Semantic Drift)
     reading_text = ""
     acoustic_features = {"pitch_variance": 85, "speech_rate": 65, "pauses": 90, "jitter": 75, "shimmer": 80}
-    if audio_reading and whisper_pipe and (1 not in skipped_steps):
+    if audio_reading and (1 not in skipped_steps):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
             tmp.write(await audio_reading.read())
             tmp_path = tmp.name
         try:
+            whisper_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny")
             reading_text = whisper_pipe(tmp_path)["text"]
+            del whisper_pipe
+            gc.collect()
             acoustic_features = extract_acoustic_features(tmp_path)
         except Exception as e:
             print(f"Reading audio error: {e}")
@@ -129,10 +131,13 @@ async def analyze_assessment(
             os.remove(tmp_path)
             
     semantic_drift_score = 80
-    if reading_text and bert_pipe and reading_text_orig:
+    if reading_text and reading_text_orig:
         try:
+            bert_pipe = pipeline("feature-extraction", model="distilbert-base-uncased")
             orig_emb = torch.tensor(bert_pipe(reading_text_orig)[0]).mean(dim=0)
             user_emb = torch.tensor(bert_pipe(reading_text)[0]).mean(dim=0)
+            del bert_pipe
+            gc.collect()
             cos = torch.nn.CosineSimilarity(dim=0, eps=1e-6)
             similarity = cos(orig_emb, user_emb).item()
             semantic_drift_score = max(0, similarity * 100)
@@ -163,12 +168,15 @@ async def analyze_assessment(
 
     # 4. Spontaneous Speech (Cookie Theft)
     spontaneous_text = ""
-    if audio_spontaneous and whisper_pipe and (4 not in skipped_steps):
+    if audio_spontaneous and (4 not in skipped_steps):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
             tmp.write(await audio_spontaneous.read())
             tmp_path = tmp.name
         try:
+            whisper_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny")
             spontaneous_text = whisper_pipe(tmp_path)["text"]
+            del whisper_pipe
+            gc.collect()
         except Exception as e:
             print(f"Spontaneous audio error: {e}")
         finally:
@@ -265,13 +273,12 @@ async def dialogflow_webhook(req: Request):
                 try:
                     import time
                     start_time = time.time()
-                    genai.configure(api_key=gemini_api_key)
-                    model = genai.GenerativeModel("gemini-3.5-flash")
+                    client = genai.Client(api_key=gemini_api_key)
                     prompt = f"You are a helpful medical AI specializing in Alzheimer's. A user said: '{user_text}'. Respond in exactly 1 concise sentence."
-                    response = model.generate_content(prompt)
+                    response = client.models.generate_content(model='gemini-3.5-flash', contents=prompt)
                     
-                    if response.parts:
-                        fulfillment_text = response.parts[0].text
+                    if response.text:
+                        fulfillment_text = response.text
                     else:
                         fulfillment_text = "I generated a response but it was empty."
                     print(f"Gemini responded in {time.time() - start_time:.2f} seconds")
