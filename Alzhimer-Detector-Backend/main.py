@@ -39,8 +39,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Removed global initialization of ML Pipelines to save memory.
-# Models will be lazily loaded in the endpoints as needed.
+# Globally initialize ML Pipelines to improve response time
+print("Loading ML models...")
+try:
+    whisper_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny")
+    bert_pipe = pipeline("feature-extraction", model="distilbert-base-uncased")
+except Exception as e:
+    print(f"Error loading huggingface pipelines: {e}")
+    whisper_pipe = None
+    bert_pipe = None
+
+if spacy:
+    try:
+        nlp_spacy = spacy.load("en_core_web_sm")
+    except Exception as e:
+        print(f"Spacy load error: {e}")
+        nlp_spacy = None
+else:
+    nlp_spacy = None
+print("ML models loaded!")
 
 def extract_acoustic_features(audio_path):
     if not librosa:
@@ -70,17 +87,14 @@ def extract_acoustic_features(audio_path):
         return {"pitch_variance": 80, "speech_rate": 70, "pauses": 85, "jitter": 75, "shimmer": 80}
 
 def calculate_idea_density(text):
-    if not spacy or not text:
+    if not nlp_spacy or not text:
         return 50 # Fallback
     try:
-        nlp = spacy.load("en_core_web_sm")
-        doc = nlp(text)
+        doc = nlp_spacy(text)
         # Count distinct ideas (nouns, verbs, adjectives, adverbs)
         ideas = [token.text for token in doc if token.pos_ in ['NOUN', 'VERB', 'ADJ', 'ADV']]
         words = [token.text for token in doc if not token.is_punct]
         density = (len(ideas) / len(words)) * 100 if len(words) > 0 else 0
-        del nlp
-        gc.collect()
         return min(100, density * 1.5) # Scale up slightly for 0-100 score
     except Exception as e:
         print(f"Spacy error: {e}")
@@ -120,10 +134,10 @@ async def analyze_assessment(
             tmp.write(await audio_reading.read())
             tmp_path = tmp.name
         try:
-            whisper_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny")
-            reading_text = whisper_pipe(tmp_path)["text"]
-            del whisper_pipe
-            gc.collect()
+            if whisper_pipe:
+                reading_text = whisper_pipe(tmp_path)["text"]
+            else:
+                reading_text = ""
             acoustic_features = extract_acoustic_features(tmp_path)
         except Exception as e:
             print(f"Reading audio error: {e}")
@@ -133,11 +147,11 @@ async def analyze_assessment(
     semantic_drift_score = 80
     if reading_text and reading_text_orig:
         try:
-            bert_pipe = pipeline("feature-extraction", model="distilbert-base-uncased")
-            orig_emb = torch.tensor(bert_pipe(reading_text_orig)[0]).mean(dim=0)
-            user_emb = torch.tensor(bert_pipe(reading_text)[0]).mean(dim=0)
-            del bert_pipe
-            gc.collect()
+            if bert_pipe:
+                orig_emb = torch.tensor(bert_pipe(reading_text_orig)[0]).mean(dim=0)
+                user_emb = torch.tensor(bert_pipe(reading_text)[0]).mean(dim=0)
+            else:
+                raise ValueError("BERT pipeline not loaded")
             cos = torch.nn.CosineSimilarity(dim=0, eps=1e-6)
             similarity = cos(orig_emb, user_emb).item()
             semantic_drift_score = max(0, similarity * 100)
@@ -152,9 +166,11 @@ async def analyze_assessment(
     # 2. Immediate Recall
     def score_recall(original, answer):
         if not original: return 0
+        if not answer: return 25 # Partial credit instead of 0 if missing
         orig_words = [w.lower() for w in original]
         ans_words = answer.lower().split()
-        correct = sum(1 for w in orig_words if any(fuzz.ratio(w, uw) > 80 for uw in ans_words))
+        # Lowered fuzz.ratio threshold from 80 to 70 for leniency
+        correct = sum(1 for w in orig_words if any(fuzz.ratio(w, uw) > 70 for uw in ans_words))
         return (correct / len(orig_words)) * 100
 
     im_score = score_recall(immediate_recall.get("original", []), immediate_recall.get("answer", ""))
@@ -173,10 +189,10 @@ async def analyze_assessment(
             tmp.write(await audio_spontaneous.read())
             tmp_path = tmp.name
         try:
-            whisper_pipe = pipeline("automatic-speech-recognition", model="openai/whisper-tiny")
-            spontaneous_text = whisper_pipe(tmp_path)["text"]
-            del whisper_pipe
-            gc.collect()
+            if whisper_pipe:
+                spontaneous_text = whisper_pipe(tmp_path)["text"]
+            else:
+                spontaneous_text = ""
         except Exception as e:
             print(f"Spontaneous audio error: {e}")
         finally:
@@ -189,7 +205,8 @@ async def analyze_assessment(
     paired_score = 0
     if "original" in paired_test and "answers" in paired_test:
         total_pairs = len(paired_test["original"])
-        correct = sum(1 for pair in paired_test["original"] if fuzz.ratio(pair["target"].lower(), paired_test["answers"].get(pair["cue"], "").lower()) > 80)
+        # Lowered fuzz threshold to 70 for leniency
+        correct = sum(1 for pair in paired_test["original"] if fuzz.ratio(pair["target"].lower(), paired_test["answers"].get(pair["cue"], "").lower()) > 70)
         paired_score = (correct / total_pairs) * 100 if total_pairs else 0
     scores['paired_associate'] = None if 5 in skipped_steps else paired_score
 
@@ -221,7 +238,9 @@ async def analyze_assessment(
     else:
         final_score = (memory_fusion * 0.5) + (language_fusion * 0.5)
         
-    risk_probability = max(0, min(100, 100 - final_score))
+    # Cap risk probability at 95% and don't let it drop below 5% for realism
+    # Also adjust the curve so it's not so drastically 100 if score is slightly low.
+    risk_probability = max(5, min(95, 100 - (final_score * 0.9)))
 
     print(f"Final Risk Probability: {risk_probability}%")
 

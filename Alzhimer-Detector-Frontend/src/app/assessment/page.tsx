@@ -275,7 +275,7 @@ export default function Assessment() {
             {step === 3 && (
               <motion.div key="s3" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -50 }} className="glass-card p-8 rounded-[3rem] bg-white max-w-2xl mx-auto border border-slate-200 w-full text-center">
                 <div className="inline-flex p-4 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 mb-4"><Clock className="w-8 h-8" /></div>
-                <h2 className="text-3xl font-display font-bold mb-2">Verbal Fluency</h2>
+                <h2 className="text-3xl font-display font-bold mb-2">Word Recall Fluency</h2>
                 
                 {!fluencyActive && fluencyTimer === 60 ? (
                   <>
