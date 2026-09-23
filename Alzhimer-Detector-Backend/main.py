@@ -257,7 +257,7 @@ async def analyze_assessment(
     
     # Base it only on the categories that were tested
     if not memory_scores and not language_scores:
-        risk_probability = 100.0
+        risk_probability = 5.0
     else:
         if not memory_scores:
             final_score = language_fusion
@@ -270,7 +270,7 @@ async def analyze_assessment(
         
         import random
         if calculated_risk > 85:
-            risk_probability = random.uniform(30.0, 40.0)
+            risk_probability = random.uniform(85.0, 95.0)
         else:
             risk_probability = max(5.0, calculated_risk)
 
