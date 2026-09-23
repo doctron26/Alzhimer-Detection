@@ -8,18 +8,44 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/utils/supabase/client";
 
-const PARAGRAPH = "The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet, which makes it an interesting linguistic tool. Yesterday, it rained heavily in the afternoon, causing small puddles to form along the cobblestone paths.";
+const PARAGRAPHS = [
+  "The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet, which makes it an interesting linguistic tool. Yesterday, it rained heavily in the afternoon, causing small puddles to form along the cobblestone paths.",
+  "In a small village nestled between rolling green hills, an old baker wakes up before dawn every day. The smell of fresh bread drifts through the quiet streets as the sun slowly rises, painting the morning sky in shades of pink and orange.",
+  "Advances in technology have significantly changed the way we communicate with one another. While it is easier than ever to send a message across the globe in seconds, some argue that face-to-face interactions are becoming less frequent."
+];
 
-const PAIRED_WORDS = [
-  { cue: "Sun", target: "Shoe" },
-  { cue: "Dog", target: "Chair" },
-  { cue: "River", target: "Coin" },
-  { cue: "Apple", target: "Table" }
+const PAIRED_WORDS_POOLS = [
+  [
+    { cue: "Sun", target: "Shoe" },
+    { cue: "Dog", target: "Chair" },
+    { cue: "River", target: "Coin" },
+    { cue: "Apple", target: "Table" }
+  ],
+  [
+    { cue: "Bird", target: "Car" },
+    { cue: "Book", target: "Tree" },
+    { cue: "Moon", target: "Cup" },
+    { cue: "Fire", target: "Glass" }
+  ],
+  [
+    { cue: "Star", target: "Hat" },
+    { cue: "Fish", target: "Door" },
+    { cue: "Mountain", target: "Pen" },
+    { cue: "Cloud", target: "Clock" }
+  ]
 ];
 
 const WORD_POOLS = [
-  ["Apple", "Table", "Penny", "Elephant", "River"]
+  ["Apple", "Table", "Penny", "Elephant", "River"],
+  ["Orange", "Chair", "Nickel", "Lion", "Lake"],
+  ["Banana", "Desk", "Dime", "Tiger", "Ocean"]
 ];
+
+const FLUENCY_CATEGORIES = ["ANIMALS", "FRUITS", "CITIES", "COLORS"];
+
+const PICTURE_POOLS = ["/cookie_theft.png", "/picnic_scene.png", "/kitchen_scene.png"];
+
+const getRandomItem = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
 export default function Assessment() {
   const router = useRouter();
@@ -27,7 +53,21 @@ export default function Assessment() {
   const [step, setStep] = useState(1);
   const [subStep, setSubStep] = useState<'memorize' | 'recall'>('memorize');
   
+  const [isMounted, setIsMounted] = useState(false);
+  const [currentParagraph, setCurrentParagraph] = useState(PARAGRAPHS[0]);
   const [currentWords, setCurrentWords] = useState<string[]>(WORD_POOLS[0]);
+  const [currentFluencyCategory, setCurrentFluencyCategory] = useState(FLUENCY_CATEGORIES[0]);
+  const [currentPairedWords, setCurrentPairedWords] = useState<{cue: string, target: string}[]>(PAIRED_WORDS_POOLS[0]);
+  const [currentPicture, setCurrentPicture] = useState(PICTURE_POOLS[0]);
+
+  useEffect(() => {
+    setCurrentParagraph(getRandomItem(PARAGRAPHS));
+    setCurrentWords(getRandomItem(WORD_POOLS));
+    setCurrentFluencyCategory(getRandomItem(FLUENCY_CATEGORIES));
+    setCurrentPairedWords(getRandomItem(PAIRED_WORDS_POOLS));
+    setCurrentPicture(getRandomItem(PICTURE_POOLS));
+    setIsMounted(true);
+  }, []);
 
   // Global State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -169,9 +209,9 @@ export default function Assessment() {
         skippedSteps: skippedSteps,
         immediateRecall: skippedSteps.includes(2) ? null : { original: currentWords, answer: immediateRecall },
         fluencyTest: skippedSteps.includes(3) ? null : { semantic: semanticFluency },
-        pairedTest: skippedSteps.includes(5) ? null : { original: PAIRED_WORDS, answers: pairedAnswers },
+        pairedTest: skippedSteps.includes(5) ? null : { original: currentPairedWords, answers: pairedAnswers },
         delayedRecall: skippedSteps.includes(6) ? null : { original: currentWords, answer: delayedRecall },
-        readingText: PARAGRAPH
+        readingText: currentParagraph
       };
       
       formData.append("writtenData", JSON.stringify(writtenData));
@@ -189,6 +229,14 @@ export default function Assessment() {
       setIsSubmitting(false);
     }
   };
+
+  if (!isMounted) {
+    return (
+      <div className="h-[100dvh] flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-primary-500 w-12 h-12" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-[100dvh] pt-6 px-4 pb-6 flex flex-col items-center justify-center bg-slate-50 text-slate-900 font-sans overflow-hidden">
@@ -218,7 +266,7 @@ export default function Assessment() {
                 <div className="inline-flex p-4 rounded-2xl bg-orange-50 text-orange-600 border border-orange-100 mb-4"><BookOpen className="w-8 h-8" /></div>
                 <h2 className="text-3xl font-display font-bold mb-4">Paragraph Reading</h2>
                 <p className="text-slate-600 mb-6">Please read the following paragraph aloud in your normal speaking voice.</p>
-                <div className="p-6 bg-orange-50/50 rounded-2xl text-xl text-slate-800 text-justify mb-8 border border-orange-100 font-medium leading-relaxed">{PARAGRAPH}</div>
+                <div className="p-6 bg-orange-50/50 rounded-2xl text-xl text-slate-800 text-justify mb-8 border border-orange-100 font-medium leading-relaxed">{currentParagraph}</div>
                 
                 {!isRecording && !readingBlob && (
                   <button onClick={() => handleStartRecording(setReadingBlob)} className="bg-primary-600 text-white px-8 py-4 rounded-full font-bold flex items-center gap-2 mx-auto"><Mic /> Start Recording</button>
@@ -280,7 +328,7 @@ export default function Assessment() {
                 {!fluencyActive && fluencyTimer === 60 ? (
                   <>
                     <p className="text-slate-600 mb-8">
-                      You will have 60 seconds to name as many ANIMALS as you can. Separate by commas or spaces.
+                      You will have 60 seconds to name as many {currentFluencyCategory} as you can. Separate by commas or spaces.
                     </p>
                     <button onClick={() => setFluencyActive(true)} className="bg-emerald-600 text-white px-10 py-4 rounded-full font-bold text-lg">Start 60s Timer</button>
                   </>
@@ -304,7 +352,7 @@ export default function Assessment() {
             {step === 4 && (
               <motion.div key="s4" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -50 }} className="glass-card p-6 bg-white w-full h-full rounded-[2rem] border border-slate-200 flex flex-col md:flex-row gap-6 relative">
                  <div className="md:w-1/2 flex items-center justify-center bg-slate-100 rounded-xl overflow-hidden relative">
-                    <Image src="/cookie_theft.png" alt="Cookie Theft" fill className="object-contain" />
+                    <Image src={currentPicture} alt="Picture Description Task" fill className="object-contain" />
                  </div>
                  <div className="md:w-1/2 flex flex-col justify-center items-center text-center p-4">
                     <h2 className="text-3xl font-display font-bold mb-4">Picture Description</h2>
@@ -343,7 +391,7 @@ export default function Assessment() {
                   <>
                     <p className="text-slate-600 mb-8">Memorize the following word pairs.</p>
                     <div className="flex flex-col items-center gap-4 mb-8">
-                      {PAIRED_WORDS.map((pair, i) => (
+                      {currentPairedWords.map((pair, i) => (
                         <div key={i} className="flex gap-4 items-center">
                           <div className="px-6 py-3 rounded-xl bg-slate-50 border border-slate-200 font-bold w-32">{pair.cue}</div>
                           <ArrowRight className="text-slate-400" />
@@ -357,7 +405,7 @@ export default function Assessment() {
                   <>
                     <p className="text-slate-600 mb-8">Type the word that was paired with each word below.</p>
                     <div className="flex flex-col items-center gap-4 mb-8">
-                      {PAIRED_WORDS.map((pair, i) => (
+                      {currentPairedWords.map((pair, i) => (
                         <div key={i} className="flex gap-4 items-center w-full max-w-xs">
                           <div className="px-6 py-3 rounded-xl bg-slate-50 border border-slate-200 font-bold w-1/2">{pair.cue}</div>
                           <input type="text" value={pairedAnswers[pair.cue] || ""} onChange={e => setPairedAnswers(p => ({...p, [pair.cue]: e.target.value}))} className="w-1/2 p-3 rounded-xl border border-slate-300 outline-none focus:border-accent-500" />
