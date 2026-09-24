@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Target, Brain, Mic, ShieldCheck, Activity, Calendar, User, FileText, TrendingUp, AlertTriangle } from "lucide-react";
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid } from 'recharts';
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Tooltip, Legend, ReferenceLine, LabelList, PolarRadiusAxis } from 'recharts';
 
 export default function Results() {
   const [resultData, setResultData] = useState<any>(null);
@@ -38,27 +38,27 @@ export default function Results() {
   // Acoustic Features (Jitter, Shimmer, Pitch Variance)
   const acousticDataRaw = resultData?.acoustic_data || { pitch_variance: 85, speech_rate: 65, pauses: 90, jitter: 75, shimmer: 80 };
   const acousticChartData = [
-    { name: 'Pitch Variance', value: acousticDataRaw.pitch_variance },
-    { name: 'Speech Rate', value: acousticDataRaw.speech_rate },
-    { name: 'Pauses', value: acousticDataRaw.pauses },
-    { name: 'Jitter', value: acousticDataRaw.jitter },
-    { name: 'Shimmer', value: acousticDataRaw.shimmer },
+    { name: 'Pitch Var', value: acousticDataRaw.pitch_variance, baseline: 75 },
+    { name: 'Speech Rate', value: acousticDataRaw.speech_rate, baseline: 80 },
+    { name: 'Pauses', value: acousticDataRaw.pauses, baseline: 60 },
+    { name: 'Jitter', value: acousticDataRaw.jitter, baseline: 85 },
+    { name: 'Shimmer', value: acousticDataRaw.shimmer, baseline: 85 },
   ];
 
   // Linguistic Features (Idea Density, Semantic Drift, Fluency)
   const linguisticDataRaw = resultData?.linguistic_data || { vocabulary: 88, complexity: 72, coherence: 91, repetition: 85 };
   const linguisticChartData = [
-    { name: 'Vocabulary', score: resultData?.scores?.fluency !== null ? Math.round(linguisticDataRaw.vocabulary) : 0 },
-    { name: 'Idea Density', score: resultData?.scores?.idea_density !== null ? Math.round(linguisticDataRaw.complexity) : 0 },
-    { name: 'Coherence', score: resultData?.scores?.semantic_drift !== null ? Math.round(linguisticDataRaw.coherence) : 0 },
-    { name: 'Repetition', score: Math.round(linguisticDataRaw.repetition) },
+    { name: 'Vocabulary', score: resultData?.scores?.fluency !== null ? Math.round(linguisticDataRaw.vocabulary) : 0, fill: '#6366f1' },
+    { name: 'Idea Density', score: resultData?.scores?.idea_density !== null ? Math.round(linguisticDataRaw.complexity) : 0, fill: '#8b5cf6' },
+    { name: 'Coherence', score: resultData?.scores?.semantic_drift !== null ? Math.round(linguisticDataRaw.coherence) : 0, fill: '#ec4899' },
+    { name: 'Repetition', score: Math.round(linguisticDataRaw.repetition), fill: '#f43f5e' },
   ].filter(d => d.score > 0);
 
   const estMMSE = Math.round(30 - (riskProbability / 100) * 15);
 
   const dummyLongitudinalData = [
-    { month: 'Jan', score: 29 }, { month: 'Feb', score: 29 }, { month: 'Mar', score: 28 },
-    { month: 'Apr', score: 28 }, { month: 'May', score: 28 }, { month: 'Jun', score: estMMSE },
+    { month: 'Jan', score: 29, avg: 28 }, { month: 'Feb', score: 29, avg: 28 }, { month: 'Mar', score: 28, avg: 27.5 },
+    { month: 'Apr', score: 28, avg: 27.5 }, { month: 'May', score: 28, avg: 27 }, { month: 'Jun', score: estMMSE, avg: 27 },
   ];
 
   return (
@@ -124,10 +124,14 @@ export default function Results() {
             </div>
             <div className="h-[300px] w-full mb-6">
               <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={acousticChartData}>
+                <RadarChart cx="50%" cy="50%" outerRadius="65%" data={acousticChartData}>
                   <PolarGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                  <PolarAngleAxis dataKey="name" stroke="#64748b" tick={{ fill: '#475569', fontSize: 13, fontWeight: 600 }} />
-                  <Radar dataKey="value" stroke="#4f46e5" strokeWidth={3} fill="#6366f1" fillOpacity={0.15} />
+                  <PolarAngleAxis dataKey="name" stroke="#64748b" tick={{ fill: '#475569', fontSize: 11, fontWeight: 600 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                  <Radar name="Patient Score" dataKey="value" stroke="#4f46e5" strokeWidth={3} fill="#6366f1" fillOpacity={0.4} />
+                  <Radar name="Healthy Baseline" dataKey="baseline" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" fill="#10b981" fillOpacity={0.1} />
                 </RadarChart>
               </ResponsiveContainer>
             </div>
@@ -140,10 +144,18 @@ export default function Results() {
             </div>
             <div className="h-[300px] w-full mb-6">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={linguisticChartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                  <XAxis type="number" stroke="#cbd5e1" tick={{ fill: '#64748b', fontSize: 12 }} />
-                  <YAxis dataKey="name" type="category" stroke="#64748b" width={90} tick={{ fill: '#475569', fontSize: 13, fontWeight: 600 }} />
-                  <Bar dataKey="score" fill="#6366f1" radius={[0, 6, 6, 0]} barSize={32} />
+                <BarChart data={linguisticChartData} layout="vertical" margin={{ top: 25, right: 40, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                  <XAxis type="number" domain={[0, 100]} stroke="#cbd5e1" tick={{ fill: '#64748b', fontSize: 12 }} />
+                  <YAxis dataKey="name" type="category" stroke="#64748b" width={90} tick={{ fill: '#475569', fontSize: 12, fontWeight: 600 }} />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <ReferenceLine x={50} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'top', value: 'Clinical Threshold', fill: '#ef4444', fontSize: 10 }} />
+                  <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={28}>
+                    {linguisticChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                    <LabelList dataKey="score" position="right" fill="#64748b" fontSize={12} fontWeight="bold" />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -156,8 +168,18 @@ export default function Results() {
             <div className="h-[250px] w-full relative mb-4">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={dynamicMemoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                    {dynamicMemoryData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ fontWeight: 'bold' }} />
+                  <Pie data={dynamicMemoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value" stroke="none" labelLine={false} label={({ cx, cy, midAngle, innerRadius, outerRadius, value }) => {
+                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                    const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
+                    const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
+                    return (
+                      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold">
+                        {value > 0 ? `${value}%` : ''}
+                      </text>
+                    );
+                  }}>
+                    {dynamicMemoryData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
@@ -178,7 +200,7 @@ export default function Results() {
             </div>
             <div className="h-[250px] w-full mt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dummyLongitudinalData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={dummyLongitudinalData} margin={{ top: 20, right: 20, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
@@ -186,9 +208,13 @@ export default function Results() {
                     </linearGradient>
                   </defs>
                   <XAxis dataKey="month" stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <YAxis stroke="#94a3b8" domain={[20, 30]} tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis stroke="#94a3b8" domain={[15, 30]} tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <Area type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                  <ReferenceLine y={24} stroke="#ef4444" strokeDasharray="4 4" label={{ position: 'insideTopRight', value: 'Impairment Cutoff (24)', fill: '#ef4444', fontSize: 11 }} />
+                  <Area name="Patient Score" type="monotone" dataKey="score" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorScore)" activeDot={{ r: 6, strokeWidth: 0, fill: '#10b981' }} />
+                  <Area name="Age-Matched Avg" type="monotone" dataKey="avg" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" fill="none" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
