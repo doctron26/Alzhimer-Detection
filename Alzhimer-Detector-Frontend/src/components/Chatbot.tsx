@@ -33,10 +33,10 @@ export default function Chatbot() {
 
     const userMessage = input.trim();
     setInput("");
-    
+
     const newUserMessage: Message = { id: Date.now().toString(), text: userMessage, isBot: false };
     setMessages((prev) => [...prev, newUserMessage]);
-    
+
     setIsTyping(true);
 
     try {
@@ -49,7 +49,7 @@ export default function Chatbot() {
       });
 
       const data = await response.json();
-      
+
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: data.reply || "Sorry, I am having trouble connecting.",
@@ -86,7 +86,7 @@ export default function Chatbot() {
               {/* Decorative background elements */}
               <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
               <div className="absolute bottom-0 left-0 -mb-4 -ml-4 w-20 h-20 bg-black/10 rounded-full blur-lg"></div>
-              
+
               <div className="relative flex items-center gap-3 z-10">
                 <div className="relative w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center border border-white/30 shadow-inner">
                   <Sparkles className="w-5 h-5 text-white" />
@@ -121,20 +121,19 @@ export default function Chatbot() {
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm mt-auto ${msg.isBot ? "bg-gradient-to-br from-primary-100 to-primary-50 border border-primary-100" : "bg-gradient-to-br from-slate-200 to-slate-100 border border-slate-200"}`}>
                       {msg.isBot ? <Sparkles className="w-4 h-4 text-primary-600" /> : <User className="w-4 h-4 text-slate-500" />}
                     </div>
-                    
+
                     <div
-                      className={`px-4 py-3 text-sm leading-relaxed ${
-                        msg.isBot
-                          ? "bg-white text-slate-700 rounded-2xl rounded-bl-sm shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-slate-100/50"
-                          : "bg-gradient-to-r from-primary-600 to-indigo-500 text-white rounded-2xl rounded-br-sm shadow-[0_4px_14px_rgba(79,70,229,0.3)] font-medium"
-                      }`}
+                      className={`px-4 py-3 text-sm leading-relaxed ${msg.isBot
+                        ? "bg-white text-slate-700 rounded-2xl rounded-bl-sm shadow-[0_2px_10px_rgba(0,0,0,0.04)] border border-slate-100/50"
+                        : "bg-gradient-to-r from-primary-600 to-indigo-500 text-white rounded-2xl rounded-br-sm shadow-[0_4px_14px_rgba(79,70,229,0.3)] font-medium"
+                        }`}
                     >
                       {msg.text}
                     </div>
                   </div>
                 </motion.div>
               ))}
-              
+
               {isTyping && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -190,7 +189,7 @@ export default function Chatbot() {
       >
         {/* Pulse effect */}
         <span className="absolute inset-0 rounded-full bg-primary-500 opacity-20 group-hover:animate-ping"></span>
-        
+
         <AnimatePresence mode="wait">
           {isOpen ? (
             <motion.div key="close" initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.2 }}>
@@ -202,7 +201,7 @@ export default function Chatbot() {
             </motion.div>
           )}
         </AnimatePresence>
-        
+
         {/* Notification dot */}
         {!isOpen && (
           <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 border-2 border-white rounded-full animate-bounce"></span>

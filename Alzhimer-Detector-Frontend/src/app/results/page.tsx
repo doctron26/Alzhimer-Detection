@@ -9,12 +9,17 @@ import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarC
 export default function Results() {
   const [resultData, setResultData] = useState<any>(null);
   const [currentDate, setCurrentDate] = useState<string>("");
+  const [patientInfo, setPatientInfo] = useState<any>(null);
 
   useEffect(() => {
     setCurrentDate(new Date().toLocaleDateString());
     const data = sessionStorage.getItem('assessmentResult');
     if (data) {
       setResultData(JSON.parse(data));
+    }
+    const pData = sessionStorage.getItem('currentPatient');
+    if (pData) {
+      setPatientInfo(JSON.parse(pData));
     }
   }, []);
 
@@ -82,7 +87,7 @@ export default function Results() {
                 </div>
               </div>
               <p className="text-slate-500 font-medium flex items-center gap-4 text-sm">
-                <span className="flex items-center gap-1.5"><User className="w-4 h-4" /> Patient ID: 894-AX2</span>
+                <span className="flex items-center gap-1.5"><User className="w-4 h-4" /> {patientInfo ? `${patientInfo.name} (Age: ${patientInfo.age}, Gender: ${patientInfo.gender})` : 'Patient ID: 894-AX2'}</span>
                 <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {currentDate}</span>
               </p>
             </div>

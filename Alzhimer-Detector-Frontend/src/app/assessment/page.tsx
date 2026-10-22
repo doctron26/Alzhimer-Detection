@@ -11,7 +11,16 @@ import { createClient } from "@/utils/supabase/client";
 const PARAGRAPHS = [
   "The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet, which makes it an interesting linguistic tool. Yesterday, it rained heavily in the afternoon, causing small puddles to form along the cobblestone paths.",
   "In a small village nestled between rolling green hills, an old baker wakes up before dawn every day. The smell of fresh bread drifts through the quiet streets as the sun slowly rises, painting the morning sky in shades of pink and orange.",
-  "Advances in technology have significantly changed the way we communicate with one another. While it is easier than ever to send a message across the globe in seconds, some argue that face-to-face interactions are becoming less frequent."
+  "Advances in technology have significantly changed the way we communicate with one another. While it is easier than ever to send a message across the globe in seconds, some argue that face-to-face interactions are becoming less frequent.",
+  "The old library was a sanctuary of silence and dust. Tall oak shelves reached towards the vaulted ceiling, packed with leather-bound books that carried the faint scent of vanilla and decaying paper.",
+  "A gentle breeze swept through the autumn forest, rustling the golden leaves before they fell to the damp earth. Squirrels hurriedly gathered acorns, preparing for the fast-approaching winter chill.",
+  "Early in the morning, a harbor comes alive with the sound of clinking ropes against metal masts. Fishermen prepare their nets while seagulls circle above, waiting for the first boats to return with the day's catch.",
+  "Deep inside the antique shop, a pendulum clock ticked steadily against the wooden wall. Sunlight streamed through a stained glass lamp, casting vibrant patches of ruby red and sapphire blue across the polished mahogany floor.",
+  "The botanical garden featured a glass conservatory filled with exotic tropical plants. Visitors walked along winding gravel paths, admiring orchid petals dripping with dew while listening to water trickling from a stone fountain.",
+  "Walking through the mountain trail, hikers paused to look at the snow-capped peaks in the distance. Clear alpine streams cascaded over granite boulders, refreshing travelers before they continued their journey upward.",
+  "A farmer worked tirelessly in the open fields as summer turned into harvest season. Golden stalks of wheat swayed under the afternoon breeze, promising a bountiful crop before the colder months arrived.",
+  "The carpenter carefully measured each piece of cedar wood before making a cut. With years of craftsmanship, he transformed rough timber into a sturdy dining table that would host family meals for generations.",
+  "On clear winter evenings, stargazers gathered on the open hilltop away from city lights. The constellations shone brightly across the ink-black expanse, offering a breathtaking glimpse into the vastness of space."
 ];
 
 const PAIRED_WORDS_POOLS = [
@@ -32,18 +41,111 @@ const PAIRED_WORDS_POOLS = [
     { cue: "Fish", target: "Door" },
     { cue: "Mountain", target: "Pen" },
     { cue: "Cloud", target: "Clock" }
+  ],
+  [
+    { cue: "Cat", target: "Window" },
+    { cue: "Train", target: "Apple" },
+    { cue: "Grass", target: "Spoon" },
+    { cue: "Rain", target: "Piano" }
+  ],
+  [
+    { cue: "Snow", target: "Bottle" },
+    { cue: "Key", target: "Horse" },
+    { cue: "Wall", target: "Flower" },
+    { cue: "Boat", target: "Mirror" }
+  ],
+  [
+    { cue: "Gold", target: "Bridge" },
+    { cue: "Leaf", target: "Pencil" },
+    { cue: "Ocean", target: "Ring" },
+    { cue: "Bread", target: "Glove" }
+  ],
+  [
+    { cue: "Road", target: "Apple" },
+    { cue: "Window", target: "Drum" },
+    { cue: "Silver", target: "Boot" },
+    { cue: "Forest", target: "Cup" }
+  ],
+  [
+    { cue: "Iron", target: "Castle" },
+    { cue: "Wind", target: "Mirror" },
+    { cue: "Honey", target: "Shoe" },
+    { cue: "Garden", target: "Bell" }
+  ],
+  [
+    { cue: "Crown", target: "River" },
+    { cue: "Paper", target: "Nest" },
+    { cue: "Stone", target: "Candle" },
+    { cue: "Milk", target: "Feather" }
+  ],
+  [
+    { cue: "Wheat", target: "Clock" },
+    { cue: "Rope", target: "Island" },
+    { cue: "Salt", target: "Basket" },
+    { cue: "Pearl", target: "Hammer" }
+  ],
+  [
+    { cue: "Tower", target: "Leaf" },
+    { cue: "Sand", target: "Whistle" },
+    { cue: "Flame", target: "Wheel" },
+    { cue: "Needle", target: "Bridge" }
+  ],
+  [
+    { cue: "Diamond", target: "Garden" },
+    { cue: "Clay", target: "Boat" },
+    { cue: "Grass", target: "Lamp" },
+    { cue: "Smoke", target: "Crown" }
   ]
 ];
 
 const WORD_POOLS = [
   ["Apple", "Table", "Penny", "Elephant", "River"],
   ["Orange", "Chair", "Nickel", "Lion", "Lake"],
-  ["Banana", "Desk", "Dime", "Tiger", "Ocean"]
+  ["Banana", "Desk", "Dime", "Tiger", "Ocean"],
+  ["Grape", "Sofa", "Quarter", "Bear", "Pond"],
+  ["Peach", "Lamp", "Dollar", "Wolf", "Stream"],
+  ["Velvet", "Church", "Daisy", "Red", "Silk"],
+  ["Carrot", "Piano", "Blanket", "Eagle", "Canyon"],
+  ["Cherry", "Bench", "Copper", "Falcon", "Valley"],
+  ["Mango", "Couch", "Silver", "Panther", "Harbor"],
+  ["Lemon", "Stool", "Jewel", "Dolphin", "Meadow"],
+  ["Walnut", "Shelf", "Bronze", "Zebra", "Forest"],
+  ["Melon", "Clock", "Ribbon", "Giraffe", "Glacier"],
+  ["Plum", "Mirror", "Token", "Camel", "Desert"],
+  ["Berry", "Candle", "Shield", "Otter", "Creek"],
+  ["Pear", "Guitar", "Marble", "Fox", "Lagoon"]
 ];
 
-const FLUENCY_CATEGORIES = ["ANIMALS", "FRUITS", "CITIES", "COLORS"];
+const FLUENCY_CATEGORIES = [
+  "ANIMALS",
+  "FRUITS",
+  "CITIES",
+  "COLORS",
+  "VEGETABLES",
+  "CLOTHING ITEMS",
+  "MUSICAL INSTRUMENTS",
+  "KITCHEN UTENSILS",
+  "BIRDS",
+  "OCCUPATIONS & PROFESSIONS",
+  "COUNTRIES",
+  "VEHICLES & TRANSPORTATION",
+  "SPORTS & OUTDOOR GAMES",
+  "FURNITURE ITEMS",
+  "FLOWERS & TREES",
+  "THINGS FOUND IN A SUPERMARKET",
+  "TOOLS & HARDWARE",
+  "BODY PARTS"
+];
 
-const PICTURE_POOLS = ["/cookie_theft.png", "/picnic_scene.png", "/kitchen_scene.png"];
+const PICTURE_POOLS = [
+  "/cookie_theft.png",
+  "/living_room_scene.jpg",
+  "/beach_scene.jpg",
+  "/bakery_scene.jpg",
+  "/picnic_scene.png",
+  "/kitchen_scene.png",
+  "/garden_scene.jpg"
+];
 
 const getRandomItem = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 

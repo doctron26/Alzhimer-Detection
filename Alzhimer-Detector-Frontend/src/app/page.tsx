@@ -3,7 +3,8 @@
 import { useRef, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { MeshGradient } from "@paper-design/shaders-react";
+import FluidFlowGrid from "@/components/ui/fluid-flow-grid";
+import BrainModelViewer from "@/components/BrainModelViewer";
 import { motion, useScroll, useTransform, AnimatePresence, useSpring, Variants } from "framer-motion";
 import { Brain, Mic, Activity, ArrowRight, BrainCircuit, Waves, Database, Target, LayoutDashboard, ShieldCheck, Zap, UserCircle } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
@@ -107,7 +108,7 @@ export default function Home() {
           <span>Alz<span className="text-primary-600 italic">Detect</span></span>
         </div>
         <div className="flex items-center gap-4">
-          {user ? (
+          {user && (
             <div className="relative">
               <button 
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
@@ -142,16 +143,10 @@ export default function Home() {
                 )}
               </AnimatePresence>
             </div>
-          ) : (
-            <Link href="/login">
-              <button className="text-sm font-medium text-slate-700 hover:text-slate-900 transition-colors">
-                Log In / Sign Up
-              </button>
-            </Link>
           )}
-          <Link href="/assessment">
-            <button className="bg-primary-600 hover:bg-primary-500 text-white px-4 py-2 rounded-full text-sm font-medium transition-all shadow-[0_4px_14px_rgba(79,70,229,0.2)] hover:shadow-[0_6px_20px_rgba(79,70,229,0.3)] hover:-translate-y-0.5">
-              Launch Assessment
+          <Link href={user ? "/patient-info" : "/login"}>
+            <button className="font-geist font-medium tracking-tight bg-primary-600 hover:bg-primary-500 text-white px-4 py-2 rounded-full text-sm transition-all shadow-[0_4px_14px_rgba(79,70,229,0.2)] hover:shadow-[0_6px_20px_rgba(79,70,229,0.3)] hover:-translate-y-0.5">
+              {user ? "New Patient Assessment" : "Admin Login to Start"}
             </button>
           </Link>
         </div>
@@ -160,13 +155,8 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative z-10 h-screen min-h-[600px] pt-24 pb-12 px-8 flex items-center overflow-hidden">
         {/* Background Animation */}
-        <div className="absolute inset-0 z-0 opacity-100">
-          <MeshGradient
-            className="w-full h-full"
-            style={{ backgroundColor: "#ffffff" }}
-            colors={["#c7d2fe", "#a5b4fc", "#818cf8", "#e0e7ff", "#f1f5f9"]}
-            speed={0.2}
-          />
+        <div className="absolute inset-0 z-0">
+          <FluidFlowGrid className="w-full h-full" />
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto w-full grid lg:grid-cols-2 gap-8 items-center">
@@ -179,7 +169,7 @@ export default function Home() {
             className="flex flex-col items-start text-left"
           >
             <motion.h1 variants={fadeUp} className="text-6xl md:text-[5rem] font-display font-black mb-6 leading-[1.1] text-slate-900 tracking-tight">
-              Detect Alzheimer's <br />
+              Detect Alzheimer&apos;s <br />
               <span className="text-gradient font-display pr-4">Months Earlier</span>
             </motion.h1>
 
@@ -188,68 +178,108 @@ export default function Home() {
             </motion.p>
 
             <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-              <Link href="/assessment">
-                <button className="flex justify-center items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-full font-bold text-base hover:bg-primary-700 transition-all shadow-[0_8px_30px_rgba(79,70,229,0.25)] hover:-translate-y-1">
-                  Start Demo <ArrowRight className="w-5 h-5" />
+              <Link href={user ? "/patient-info" : "/login"}>
+                <button className="flex justify-center items-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-full font-geist font-semibold text-base tracking-tight hover:bg-primary-700 transition-all shadow-[0_8px_30px_rgba(79,70,229,0.25)] hover:-translate-y-1">
+                  {user ? "Start Assessment" : "Start Demo"} <ArrowRight className="w-5 h-5" />
                 </button>
               </Link>
-              <Link href="/results">
-                <button className="flex justify-center items-center gap-2 bg-white/50 backdrop-blur-md border border-slate-200 text-slate-700 px-6 py-3 rounded-full font-bold text-base hover:bg-white transition-all hover:-translate-y-1">
-                  View Dashboard <LayoutDashboard className="w-5 h-5 text-slate-500" />
-                </button>
-              </Link>
+              <button 
+                onClick={() => document.getElementById('science')?.scrollIntoView({ behavior: 'smooth' })}
+                className="flex justify-center items-center gap-2 bg-white/60 backdrop-blur-md border border-slate-200 text-slate-700 px-6 py-3 rounded-full font-geist font-medium text-base tracking-tight hover:bg-white transition-all hover:-translate-y-1"
+              >
+                Read the Science <BrainCircuit className="w-5 h-5 text-slate-500" />
+              </button>
             </motion.div>
           </motion.div>
 
-          {/* Right Image Composition */}
+          {/* Right 3D Model Composition */}
           <motion.div 
             style={{ y: y1 }}
-            className="relative hidden lg:block max-w-[400px] ml-auto w-full"
+            className="relative hidden lg:block max-w-[480px] ml-auto w-full h-[520px]"
           >
             <motion.div 
               animate={{ y: [0, -15, 0] }}
               transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }}
-              className="relative w-full aspect-[4/5] rounded-[3rem] overflow-hidden shadow-2xl border-[6px] border-white/60 backdrop-blur-sm z-10"
+              className="relative w-full h-full z-10"
             >
-              <Image 
-                src="/hero_medical_ai.png" 
-                alt="AI Brain Medical Visualization" 
-                fill 
-                className="object-cover"
-                priority
-              />
+              <BrainModelViewer modelUrl="/brain_project.glb" />
             </motion.div>
             
-            {/* Floating UI Elements */}
+            {/* Floating Telemetry Badge (Top Right) */}
             <motion.div 
-              style={{ y: y2 }}
-              className="absolute bottom-10 -left-12 glass-card p-4 rounded-2xl w-56 shadow-2xl bg-white/90 backdrop-blur-xl z-20"
+              style={{ y: y3 }}
+              className="absolute top-8 -right-6 bg-white/90 backdrop-blur-xl border border-slate-200/80 rounded-xl p-3 shadow-[0_12px_32px_-4px_rgba(15,23,42,0.08)] z-20 flex items-center gap-3.5 select-none"
             >
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-900">Analysis Complete</p>
-                  <p className="text-[10px] text-emerald-600 font-medium">99.2% Confidence</p>
-                </div>
+              <div className="relative flex items-center justify-center w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100/80 text-indigo-600">
+                <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-600"></span>
+                </span>
+                <BrainCircuit className="w-4 h-4" />
               </div>
-              <div className="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: "100%" }}
-                  transition={{ duration: 1.5, delay: 1, ease: "easeOut" }}
-                  className="bg-emerald-500 h-full rounded-full" 
-                />
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Live Telemetry</span>
+                  <span className="text-[10px] text-slate-300">|</span>
+                  <span className="font-mono text-[10px] text-indigo-600 font-semibold">128 Hz</span>
+                </div>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-xs font-bold text-slate-800 tracking-tight">Cortical Mapping</span>
+                  <svg className="w-12 h-3 text-indigo-500 stroke-current fill-none opacity-80" viewBox="0 0 48 12">
+                    <path d="M0,6 Q6,6 9,6 T14,1 T18,11 T22,4 T26,8 T30,6 L48,6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
               </div>
             </motion.div>
 
+            {/* Floating Diagnostic Card (Bottom Left) */}
             <motion.div 
-              style={{ y: y3 }}
-              className="absolute top-20 -right-4 glass-card p-3 rounded-2xl shadow-xl bg-white/90 backdrop-blur-xl flex items-center gap-2 z-20"
+              style={{ y: y2 }}
+              className="absolute bottom-6 -left-10 bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-2xl p-4 w-64 shadow-[0_20px_48px_-8px_rgba(15,23,42,0.12)] z-20 select-none"
             >
-              <Activity className="w-4 h-4 text-primary-500 animate-pulse" />
-              <span className="font-bold text-xs">Processing Neural Activity...</span>
+              {/* Header tags */}
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="font-mono text-[9px] uppercase tracking-wider font-semibold text-slate-500 bg-slate-100/90 px-2 py-0.5 rounded border border-slate-200/60">
+                  MULTIMODAL_V4
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-700 font-mono text-[9px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  ANALYSIS COMPLETE
+                </span>
+              </div>
+
+              {/* Metric Row */}
+              <div className="flex items-baseline justify-between mb-2">
+                <div>
+                  <span className="font-display font-black text-2xl text-slate-900 tracking-tight">99.2%</span>
+                  <span className="text-[10px] font-semibold text-slate-400 ml-1.5 uppercase tracking-wide">Certainty</span>
+                </div>
+                <span className="font-mono text-[10px] text-emerald-600 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                  AUC 0.994
+                </span>
+              </div>
+
+              {/* Segmented precision meter */}
+              <div className="grid grid-cols-5 gap-1 my-2">
+                <div className="h-1 rounded-full bg-emerald-500"></div>
+                <div className="h-1 rounded-full bg-emerald-500"></div>
+                <div className="h-1 rounded-full bg-emerald-500"></div>
+                <div className="h-1 rounded-full bg-emerald-500"></div>
+                <div className="h-1 rounded-full bg-emerald-400 relative overflow-hidden">
+                  <motion.div 
+                    initial={{ x: "-100%" }}
+                    animate={{ x: "0%" }}
+                    transition={{ duration: 1.2, delay: 0.5, ease: "easeOut" }}
+                    className="absolute inset-0 bg-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Sub-metrics */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100/80 text-[10px] text-slate-400 font-medium">
+                <span>Acoustic + Cognitive</span>
+                <span className="font-mono text-slate-600 font-semibold">Latency: 18ms</span>
+              </div>
             </motion.div>
           </motion.div>
 
@@ -274,7 +304,7 @@ export default function Home() {
       </section>
 
       {/* Feature 1: Speech & Language */}
-      <section className="relative z-10 py-32 px-8">
+      <section id="science" className="relative z-10 py-32 px-8">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, rotate: -2 }}
@@ -448,11 +478,11 @@ export default function Home() {
           <p className="text-xl text-slate-300 mb-10 font-light max-w-2xl mx-auto leading-relaxed">
             By concatenating audio features, linguistic representations, and memory scores, our final network outputs a highly reliable Risk Probability and Cognitive Score.
           </p>
-          <Link href="/assessment">
+          <Link href={user ? "/patient-info" : "/login"}>
             <motion.button 
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="bg-white text-slate-900 px-10 py-5 rounded-full font-bold text-lg hover:bg-slate-100 transition-colors shadow-2xl"
+              className="bg-white text-slate-900 px-10 py-5 rounded-full font-geist font-semibold text-lg tracking-tight hover:bg-slate-100 transition-colors shadow-2xl"
             >
               Experience the Assessment Flow
             </motion.button>
