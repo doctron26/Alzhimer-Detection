@@ -174,13 +174,14 @@ export default function Results() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ fontWeight: 'bold' }} />
-                  <Pie data={dynamicMemoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value" stroke="none" labelLine={false} label={({ cx, cy, midAngle, innerRadius, outerRadius, value }) => {
-                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                    const x = cx + radius * Math.cos(-midAngle * Math.PI / 180);
-                    const y = cy + radius * Math.sin(-midAngle * Math.PI / 180);
+                  <Pie data={dynamicMemoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value" stroke="none" labelLine={false} label={({ cx = 0, cy = 0, midAngle = 0, innerRadius = 0, outerRadius = 0, value = 0 }: any) => {
+                    const radius = Number(innerRadius) + (Number(outerRadius) - Number(innerRadius)) * 0.5;
+                    const angle = Number(midAngle);
+                    const x = Number(cx) + radius * Math.cos(-angle * Math.PI / 180);
+                    const y = Number(cy) + radius * Math.sin(-angle * Math.PI / 180);
                     return (
                       <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold">
-                        {value > 0 ? `${value}%` : ''}
+                        {typeof value === 'number' && value > 0 ? `${value}%` : ''}
                       </text>
                     );
                   }}>
