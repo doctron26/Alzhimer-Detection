@@ -162,7 +162,10 @@ export default function Assessment() {
   const [currentPairedWords, setCurrentPairedWords] = useState<{cue: string, target: string}[]>(PAIRED_WORDS_POOLS[0]);
   const [currentPicture, setCurrentPicture] = useState(PICTURE_POOLS[0]);
 
+  const [sessionId, setSessionId] = useState<string>("");
+
   useEffect(() => {
+    setSessionId(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
     setCurrentParagraph(getRandomItem(PARAGRAPHS));
     setCurrentWords(getRandomItem(WORD_POOLS));
     setCurrentFluencyCategory(getRandomItem(FLUENCY_CATEGORIES));
@@ -170,6 +173,29 @@ export default function Assessment() {
     setCurrentPicture(getRandomItem(PICTURE_POOLS));
     setIsMounted(true);
   }, []);
+
+  const triggerPrecomputeStep1 = (blob: Blob) => {
+    if (!sessionId) return;
+    console.log("⚡ [BACKGROUND] Dispatching Step 1 audio for progressive precomputation...");
+    const fd = new FormData();
+    fd.append("sessionId", sessionId);
+    fd.append("readingText", currentParagraph);
+    fd.append("audio_reading", blob, "reading.webm");
+    fetch("/api/precompute-step1", { method: "POST", body: fd }).catch(err => {
+      console.warn("Precompute Step 1 dispatch error:", err);
+    });
+  };
+
+  const triggerPrecomputeStep4 = (blob: Blob) => {
+    if (!sessionId) return;
+    console.log("⚡ [BACKGROUND] Dispatching Step 4 audio for progressive precomputation...");
+    const fd = new FormData();
+    fd.append("sessionId", sessionId);
+    fd.append("audio_spontaneous", blob, "spontaneous.webm");
+    fetch("/api/precompute-step4", { method: "POST", body: fd }).catch(err => {
+      console.warn("Precompute Step 4 dispatch error:", err);
+    });
+  };
 
   // Global State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -267,6 +293,13 @@ export default function Assessment() {
     if (isRecording) handleStopRecording();
     setSubStep('memorize');
     
+    // Background precomputation trigger on advance
+    if (currentStep === 1 && readingBlob) {
+      triggerPrecomputeStep1(readingBlob);
+    } else if (currentStep === 4 && spontaneousBlob) {
+      triggerPrecomputeStep4(spontaneousBlob);
+    }
+
     if (currentStep === 6) {
        handleSubmit();
     } else {
@@ -302,12 +335,13 @@ export default function Assessment() {
           }).catch(err => console.error("Failed to upload spontaneous audio to Supabase:", err));
       }
 
-      // 2. Send exactly the same data to the Python backend for analysis
+      // 2. Send data to the Python backend for analysis (uses instant precomputed cache)
       const formData = new FormData();
       if (readingBlob && !skippedSteps.includes(1)) formData.append("audio_reading", readingBlob, "reading.webm");
       if (spontaneousBlob && !skippedSteps.includes(4)) formData.append("audio_spontaneous", spontaneousBlob, "spontaneous.webm");
       
       const writtenData = {
+        sessionId: sessionId,
         skippedSteps: skippedSteps,
         immediateRecall: skippedSteps.includes(2) ? null : { original: currentWords, answer: immediateRecall },
         fluencyTest: skippedSteps.includes(3) ? null : { semantic: semanticFluency },
@@ -371,7 +405,7 @@ export default function Assessment() {
                 <div className="p-6 bg-orange-50/50 rounded-2xl text-xl text-slate-800 text-justify mb-8 border border-orange-100 font-medium leading-relaxed">{currentParagraph}</div>
                 
                 {!isRecording && !readingBlob && (
-                  <button onClick={() => handleStartRecording(setReadingBlob)} className="bg-primary-600 text-white px-8 py-4 rounded-full font-bold flex items-center gap-2 mx-auto"><Mic /> Start Recording</button>
+                  <button onClick={() => handleStartRecording((blob) => { setReadingBlob(blob); triggerPrecomputeStep1(blob); })} className="bg-primary-600 text-white px-8 py-4 rounded-full font-bold flex items-center gap-2 mx-auto"><Mic /> Start Recording</button>
                 )}
                 {isRecording && (
                    <div className="flex flex-col items-center">
@@ -461,7 +495,7 @@ export default function Assessment() {
                     <p className="text-slate-600 mb-8">Describe everything you see happening in this picture. Please record your spontaneous speech.</p>
                     
                     {!isRecording && !spontaneousBlob && (
-                      <button onClick={() => handleStartRecording(setSpontaneousBlob)} className="bg-primary-600 text-white px-8 py-4 rounded-full font-bold flex items-center gap-2"><Mic /> Start Recording</button>
+                      <button onClick={() => handleStartRecording((blob) => { setSpontaneousBlob(blob); triggerPrecomputeStep4(blob); })} className="bg-primary-600 text-white px-8 py-4 rounded-full font-bold flex items-center gap-2"><Mic /> Start Recording</button>
                     )}
                     {isRecording && (
                        <div className="flex flex-col items-center">
