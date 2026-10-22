@@ -26,7 +26,7 @@ export default function Results() {
   const handlePrint = () => window.print();
 
   // ML Biomarkers Safely Extracted
-  const riskProbability = resultData?.risk_probability !== undefined ? Math.round(resultData.risk_probability) : 12;
+  const riskProbability = resultData?.risk_probability !== undefined ? Math.round(resultData.risk_probability) : 100;
   const isHighRisk = riskProbability > 50;
 
   // Episodic Memory Breakdown
@@ -35,23 +35,26 @@ export default function Results() {
   const pairedScore = resultData?.scores?.paired_associate;
   
   const dynamicMemoryData = [
-    { name: 'Immediate', value: immediateScore !== null ? Math.round(immediateScore ?? 100) : 0, color: '#10b981', skipped: immediateScore === null },
-    { name: 'Delayed', value: delayedScore !== null ? Math.round(delayedScore ?? 100) : 0, color: '#3b82f6', skipped: delayedScore === null },
-    { name: 'Paired', value: pairedScore !== null ? Math.round(pairedScore ?? 100) : 0, color: '#f59e0b', skipped: pairedScore === null },
+    { name: 'Immediate', value: immediateScore !== null ? Math.round(immediateScore ?? 0) : 0, color: '#10b981', skipped: immediateScore === null },
+    { name: 'Delayed', value: delayedScore !== null ? Math.round(delayedScore ?? 0) : 0, color: '#3b82f6', skipped: delayedScore === null },
+    { name: 'Paired', value: pairedScore !== null ? Math.round(pairedScore ?? 0) : 0, color: '#f59e0b', skipped: pairedScore === null },
   ].filter(d => !d.skipped);
 
+  // Check if all tests were skipped
+  const isAllSkipped = riskProbability === 100 && (!resultData?.scores || Object.values(resultData.scores).every(v => v === null));
+
   // Acoustic Features (Jitter, Shimmer, Pitch Variance)
-  const acousticDataRaw = resultData?.acoustic_data || { pitch_variance: 85, speech_rate: 65, pauses: 90, jitter: 75, shimmer: 80 };
+  const acousticDataRaw = resultData?.acoustic_data || { pitch_variance: 0, speech_rate: 0, pauses: 0, jitter: 0, shimmer: 0 };
   const acousticChartData = [
-    { name: 'Pitch Var', value: acousticDataRaw.pitch_variance, baseline: 75 },
-    { name: 'Speech Rate', value: acousticDataRaw.speech_rate, baseline: 80 },
-    { name: 'Pauses', value: acousticDataRaw.pauses, baseline: 60 },
-    { name: 'Jitter', value: acousticDataRaw.jitter, baseline: 85 },
-    { name: 'Shimmer', value: acousticDataRaw.shimmer, baseline: 85 },
+    { name: 'Pitch Var', value: Math.round(acousticDataRaw.pitch_variance), baseline: 75 },
+    { name: 'Speech Rate', value: Math.round(acousticDataRaw.speech_rate), baseline: 80 },
+    { name: 'Pauses', value: Math.round(acousticDataRaw.pauses), baseline: 60 },
+    { name: 'Jitter', value: Math.round(acousticDataRaw.jitter), baseline: 85 },
+    { name: 'Shimmer', value: Math.round(acousticDataRaw.shimmer), baseline: 85 },
   ];
 
   // Linguistic Features (Idea Density, Semantic Drift, Fluency)
-  const linguisticDataRaw = resultData?.linguistic_data || { vocabulary: 88, complexity: 72, coherence: 91, repetition: 85 };
+  const linguisticDataRaw = resultData?.linguistic_data || { vocabulary: 0, complexity: 0, coherence: 0, repetition: 0 };
   const linguisticChartData = [
     { name: 'Vocabulary', score: resultData?.scores?.fluency !== null ? Math.round(linguisticDataRaw.vocabulary) : 0, fill: '#6366f1' },
     { name: 'Idea Density', score: resultData?.scores?.idea_density !== null ? Math.round(linguisticDataRaw.complexity) : 0, fill: '#8b5cf6' },
@@ -59,7 +62,7 @@ export default function Results() {
     { name: 'Repetition', score: Math.round(linguisticDataRaw.repetition), fill: '#f43f5e' },
   ].filter(d => d.score > 0);
 
-  const estMMSE = Math.round(30 - (riskProbability / 100) * 15);
+  const estMMSE = isAllSkipped ? 0 : Math.round(30 - (riskProbability / 100) * 15);
 
   const dummyLongitudinalData = [
     { month: 'Jan', score: 29, avg: 28 }, { month: 'Feb', score: 29, avg: 28 }, { month: 'Mar', score: 28, avg: 27.5 },
@@ -102,9 +105,15 @@ export default function Results() {
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-4"><Activity className={`w-6 h-6 ${isHighRisk ? 'text-rose-500' : 'text-emerald-500'}`} /><h3 className="text-slate-600 font-bold uppercase tracking-wider">Overall Risk Score</h3></div>
               <div className="flex items-baseline gap-2 mb-6"><span className="text-7xl font-black">{riskProbability}</span><span className="text-3xl font-bold text-slate-400">%</span></div>
-              <p className="text-slate-600 leading-relaxed mb-6">{isHighRisk ? "High probability of cognitive decline detected across spontaneous speech and memory tasks." : "Acoustic and linguistic markers remain stable and within healthy percentiles."}</p>
+              <p className="text-slate-600 leading-relaxed mb-6">
+                {isAllSkipped
+                  ? "Assessment incomplete: all cognitive and speech tasks were skipped. Maximum risk score assigned due to lack of diagnostic data."
+                  : isHighRisk
+                  ? "High probability of cognitive decline detected across spontaneous speech and memory tasks."
+                  : "Acoustic and linguistic markers remain stable and within healthy percentiles."}
+              </p>
               <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border ${isHighRisk ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                {isHighRisk ? 'Elevated Risk Detected' : 'Low Risk Detected'}
+                {isAllSkipped ? 'Incomplete Assessment (100% Risk)' : isHighRisk ? 'Elevated Risk Detected' : 'Low Risk Detected'}
               </div>
             </div>
           </motion.div>
@@ -113,9 +122,15 @@ export default function Results() {
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-4"><Brain className="w-6 h-6 text-accent-500" /><h3 className="text-slate-600 font-bold uppercase tracking-wider">Cognitive Score (MMSE Est.)</h3></div>
               <div className="flex items-baseline gap-2 mb-6"><span className="text-7xl font-black">{estMMSE}</span><span className="text-3xl font-bold text-slate-400">/30</span></div>
-              <p className="text-slate-600 leading-relaxed mb-6">{estMMSE >= 26 ? "Performance in immediate and delayed recall tasks was excellent." : "Performance indicates challenges with working memory consolidation."}</p>
-              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border ${estMMSE >= 26 ? 'bg-accent-50 text-accent-700 border-accent-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                {estMMSE >= 26 ? 'Normal Cognition' : 'Mild Cognitive Impairment'}
+              <p className="text-slate-600 leading-relaxed mb-6">
+                {isAllSkipped
+                  ? "No cognitive data available to estimate MMSE memory consolidation."
+                  : estMMSE >= 26
+                  ? "Performance in immediate and delayed recall tasks was excellent."
+                  : "Performance indicates challenges with working memory consolidation."}
+              </p>
+              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border ${isAllSkipped ? 'bg-slate-100 text-slate-700 border-slate-300' : estMMSE >= 26 ? 'bg-accent-50 text-accent-700 border-accent-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                {isAllSkipped ? 'Untested / Skipped' : estMMSE >= 26 ? 'Normal Cognition' : 'Mild Cognitive Impairment'}
               </div>
             </div>
           </motion.div>

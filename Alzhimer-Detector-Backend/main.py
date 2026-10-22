@@ -70,7 +70,15 @@ else:
     nlp_spacy = None
 print("ML models loaded!")
 
-def extract_acoustic_features(audio_path):
+# Warm up numba JIT compiler on a tiny dummy array during startup so first user request doesn't lag
+if librosa:
+    try:
+        dummy_y = np.zeros(400, dtype=np.float32)
+        _ = librosa.yin(dummy_y, fmin=75, fmax=350, sr=4000, frame_length=256, hop_length=128)
+    except Exception:
+        pass
+
+def extract_acoustic_features(audio_path, transcript_text=""):
     # Ultra-fast audio loading using soundfile (1ms vs 2840ms with librosa.load)
     y = None
     sr = 16000
@@ -89,56 +97,129 @@ def extract_acoustic_features(audio_path):
                 y, sr = librosa.load(audio_path, sr=16000)
             except Exception as e:
                 print(f"Audio loading error: {e}")
-                return {"pitch_variance": 80, "speech_rate": 70, "pauses": 85, "jitter": 75, "shimmer": 80}
+                return {"pitch_variance": 0.0, "speech_rate": 0.0, "pauses": 0.0, "jitter": 0.0, "shimmer": 0.0}
         else:
-            return {"pitch_variance": 80, "speech_rate": 70, "pauses": 85, "jitter": 75, "shimmer": 80}
+            return {"pitch_variance": 0.0, "speech_rate": 0.0, "pauses": 0.0, "jitter": 0.0, "shimmer": 0.0}
+
+    if len(y) == 0:
+        return {"pitch_variance": 0.0, "speech_rate": 0.0, "pauses": 0.0, "jitter": 0.0, "shimmer": 0.0}
 
     try:
-        # 1. Fast Vectorized Zero-Crossing Rate in NumPy (0.1ms vs 1650ms)
+        duration_sec = float(len(y)) / float(sr)
+
+        # 1. Fast Vectorized Zero-Crossing Rate in NumPy (0.1ms)
         zcr = float(np.mean(np.diff(np.signbit(y)) != 0)) if len(y) > 1 else 0.05
 
-        # 2. Fast pitch tracking using subsampled YIN algorithm (45ms vs 9180ms with piptrack)
-        pitch_variance = 250.0
-        if librosa and len(y) > 0:
+        # 2. Fast Short-Time Frame RMS via Strided NumPy (< 0.7ms)
+        frame_len = int(sr * 0.025) # 25ms window
+        hop_len = int(sr * 0.010)   # 10ms hop
+        if len(y) >= frame_len:
+            shape = ((len(y) - frame_len) // hop_len, frame_len)
+            strides = (y.strides[0] * hop_len, y.strides[0])
+            frames = np.lib.stride_tricks.as_strided(y, shape=shape, strides=strides)
+            rms = np.sqrt(np.mean(frames**2, axis=1))
+        else:
+            rms = np.array([np.sqrt(np.mean(y**2))], dtype=np.float32)
+
+        # 3. Dynamic Pauses Analysis (Voice Activity Detection)
+        max_rms = float(np.max(rms)) if len(rms) > 0 else 0.0
+        threshold = max(0.005, max_rms * 0.15)
+        is_silent = rms < threshold
+        pause_ratio = float(np.mean(is_silent)) if len(is_silent) > 0 else 0.0
+        # Optimal conversational pause ratio is ~15-25%. Prolonged hesitations drop the score.
+        pauses_score = round(max(5.0, min(100.0, 100.0 - (abs(pause_ratio - 0.20) * 125.0))), 1)
+
+        # 4. Fast Subsampled Pitch Tracking & Pitch Variance
+        pitch_variance = 0.0
+        valid_f0 = np.array([], dtype=np.float32)
+        if librosa and len(y) >= 1000:
             step = max(1, sr // 4000) # downsample to 4kHz (voice F0 is 75-350Hz)
             sub_y = y[::step]
             sub_sr = sr // step
             try:
-                f0 = librosa.yin(sub_y, fmin=75, fmax=350, sr=sub_sr)
+                f0 = librosa.yin(sub_y, fmin=75, fmax=350, sr=sub_sr, frame_length=256, hop_length=128)
                 valid_f0 = f0[np.isfinite(f0) & (f0 > 75) & (f0 < 350)]
                 if len(valid_f0) > 0:
                     pitch_variance = float(np.var(valid_f0))
             except Exception as e:
                 print(f"YIN pitch warning: {e}")
 
-        # Normalize into 0-100 scores
-        pitch_score = min(100, max(0, (pitch_variance / 1000) * 100))
-        stability_score = max(0, 100 - (zcr * 1000))
+        # Normal human pitch variance is ~150-400 Hz^2; flat monotone speech has low variance
+        pitch_score = round(min(100.0, max(5.0, (pitch_variance / 400.0) * 100.0)), 1)
+
+        # 5. Dynamic Vocal Jitter (Cycle-to-cycle pitch period perturbation)
+        if len(valid_f0) > 3:
+            t0_periods = 1.0 / valid_f0
+            jitt_rel = float(np.mean(np.abs(np.diff(t0_periods)))) / max(1e-6, float(np.mean(t0_periods)))
+            # Normal vocal jitter is < 1.04%. Elevated jitter indicates vocal instability
+            jitter_score = round(max(5.0, min(100.0, 100.0 - (jitt_rel * 1400.0))), 1)
+        else:
+            jitter_score = round(max(5.0, min(100.0, 100.0 - (zcr * 1000.0))), 1)
+
+        # 6. Dynamic Vocal Shimmer (Cycle-to-cycle amplitude perturbation in voiced frames)
+        voiced_rms = rms[rms >= threshold]
+        if len(voiced_rms) > 3:
+            shim_rel = float(np.mean(np.abs(np.diff(voiced_rms)))) / max(1e-6, float(np.mean(voiced_rms)))
+            # Normal vocal shimmer is < 3.8%. Elevated shimmer indicates amplitude tremor
+            shimmer_score = round(max(5.0, min(100.0, 100.0 - (shim_rel * 450.0))), 1)
+        else:
+            shimmer_score = round(max(5.0, min(100.0, jitter_score * 0.95)), 1)
+
+        # 7. Dynamic Speech Rate (Words Per Minute / Syllabic Rate)
+        if transcript_text and transcript_text.strip():
+            words = [w for w in transcript_text.split() if len(w) > 0]
+            wpm = (len(words) / max(0.5, duration_sec)) * 60.0
+            # Target conversational reading rate is ~140 WPM
+            speech_rate_score = round(max(5.0, min(100.0, (wpm / 140.0) * 85.0)), 1)
+        else:
+            # Detect pseudo-syllables from energy envelope bursts
+            if len(rms) > 2:
+                diff = np.diff((rms >= threshold).astype(int))
+                syllables = int(np.sum(diff > 0))
+                sps = syllables / max(0.5, duration_sec) # syllables/sec (healthy is ~3.5-4.5)
+                speech_rate_score = round(max(5.0, min(100.0, (sps / 3.8) * 80.0)), 1)
+            else:
+                speech_rate_score = 50.0
 
         return {
             "pitch_variance": pitch_score,
-            "speech_rate": 75, # Placeholder
-            "pauses": 80, # Placeholder
-            "jitter": stability_score,
-            "shimmer": stability_score * 0.95
+            "speech_rate": speech_rate_score,
+            "pauses": pauses_score,
+            "jitter": jitter_score,
+            "shimmer": shimmer_score
         }
     except Exception as e:
         print(f"Acoustic extraction error: {e}")
-        return {"pitch_variance": 80, "speech_rate": 70, "pauses": 85, "jitter": 75, "shimmer": 80}
+        return {"pitch_variance": 50.0, "speech_rate": 50.0, "pauses": 50.0, "jitter": 50.0, "shimmer": 50.0}
 
 def calculate_idea_density(text):
-    if not nlp_spacy or not text:
-        return 50 # Fallback
+    if not nlp_spacy or not text or not text.strip():
+        return 0.0
     try:
         doc = nlp_spacy(text)
         # Count distinct ideas (nouns, verbs, adjectives, adverbs)
         ideas = [token.text for token in doc if token.pos_ in ['NOUN', 'VERB', 'ADJ', 'ADV']]
-        words = [token.text for token in doc if not token.is_punct]
-        density = (len(ideas) / len(words)) * 100 if len(words) > 0 else 0
-        return min(100, density * 1.5) # Scale up slightly for 0-100 score
+        words = [token.text for token in doc if not token.is_punct and not token.is_space]
+        if not words:
+            return 0.0
+        density = (len(ideas) / len(words)) * 100.0
+        # Normal English conversational idea density is ~45-55%
+        return round(min(100.0, max(0.0, density * 1.6)), 1)
     except Exception as e:
         print(f"Spacy error: {e}")
-        return 50
+        return 0.0
+
+def calculate_repetition_score(text):
+    """Calculates vocabulary diversity and Type-Token Ratio (TTR). Low score indicates perseveration."""
+    if not text or not text.strip():
+        return 0.0
+    words = [w.strip(".,!?;:\"").lower() for w in text.split() if len(w.strip(".,!?;:\"")) > 1]
+    if not words:
+        return 0.0
+    unique_words = set(words)
+    ttr = len(unique_words) / len(words)
+    # Higher TTR means high lexical diversity (low pathological repetition)
+    return round(min(100.0, max(5.0, ttr * 125.0)), 1)
 
 @app.get("/")
 def read_root():
@@ -181,35 +262,39 @@ async def compute_reading_analysis(audio_bytes: bytes, reading_text_orig: str):
     if not audio_bytes:
         return {
             "reading_text": "",
-            "acoustic_features": {"pitch_variance": 85, "speech_rate": 65, "pauses": 90, "jitter": 75, "shimmer": 80},
-            "semantic_drift_score": 80
+            "acoustic_features": {"pitch_variance": 0.0, "speech_rate": 0.0, "pauses": 0.0, "jitter": 0.0, "shimmer": 0.0},
+            "semantic_drift_score": None
         }
     with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
         tmp.write(audio_bytes)
         tmp_path = tmp.name
     try:
-        w_task = asyncio.to_thread(run_whisper, tmp_path)
-        a_task = asyncio.to_thread(extract_acoustic_features, tmp_path)
-        reading_text, acoustic_features = await asyncio.gather(w_task, a_task)
+        # Step 1: Run Whisper transcription
+        reading_text = await asyncio.to_thread(run_whisper, tmp_path)
+        # Step 2: Extract acoustic features with speech text passed for WPM speech rate
+        acoustic_features = await asyncio.to_thread(extract_acoustic_features, tmp_path, reading_text)
     finally:
         try: os.remove(tmp_path)
         except Exception: pass
 
     def calc_drift():
         if not reading_text or not reading_text_orig:
-            return 80
+            return 0.0
         if FAST_MODE:
-            return fuzz.token_set_ratio(reading_text_orig, reading_text)
+            return float(fuzz.token_set_ratio(reading_text_orig, reading_text))
         try:
             if bert_pipe:
                 orig_emb = torch.tensor(bert_pipe(reading_text_orig)[0]).mean(dim=0)
                 user_emb = torch.tensor(bert_pipe(reading_text)[0]).mean(dim=0)
                 cos = torch.nn.CosineSimilarity(dim=0, eps=1e-6)
-                return max(0, cos(orig_emb, user_emb).item() * 100)
+                sim = cos(orig_emb, user_emb).item()
+                # Map cosine similarity to 0-100 scale dynamically
+                drift_score = max(0.0, min(100.0, ((sim - 0.35) / 0.65) * 100.0))
+                return round(drift_score, 1)
             else:
-                return fuzz.token_set_ratio(reading_text_orig, reading_text)
+                return float(fuzz.token_set_ratio(reading_text_orig, reading_text))
         except:
-            return fuzz.token_set_ratio(reading_text_orig, reading_text)
+            return float(fuzz.token_set_ratio(reading_text_orig, reading_text))
 
     semantic_drift_score = await asyncio.to_thread(calc_drift)
     return {
@@ -220,7 +305,7 @@ async def compute_reading_analysis(audio_bytes: bytes, reading_text_orig: str):
 
 async def compute_spontaneous_analysis(audio_bytes: bytes):
     if not audio_bytes:
-        return {"spontaneous_text": "", "idea_density": 50}
+        return {"spontaneous_text": "", "idea_density": None}
     with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
         tmp.write(audio_bytes)
         tmp_path = tmp.name
@@ -230,7 +315,7 @@ async def compute_spontaneous_analysis(audio_bytes: bytes):
         try: os.remove(tmp_path)
         except Exception: pass
 
-    idea_density = await asyncio.to_thread(calculate_idea_density, spontaneous_text) if spontaneous_text else 50
+    idea_density = await asyncio.to_thread(calculate_idea_density, spontaneous_text) if spontaneous_text else 0.0
     return {
         "spontaneous_text": spontaneous_text,
         "idea_density": idea_density
@@ -296,13 +381,13 @@ async def analyze_assessment(
         else:
             step1_result = {
                 "reading_text": "",
-                "acoustic_features": {"pitch_variance": 85, "speech_rate": 65, "pauses": 90, "jitter": 75, "shimmer": 80},
-                "semantic_drift_score": 80
+                "acoustic_features": {"pitch_variance": 0.0, "speech_rate": 0.0, "pauses": 0.0, "jitter": 0.0, "shimmer": 0.0},
+                "semantic_drift_score": 0.0
             }
     else:
         step1_result = {
             "reading_text": "",
-            "acoustic_features": {"pitch_variance": 85, "speech_rate": 65, "pauses": 90, "jitter": 75, "shimmer": 80},
+            "acoustic_features": {"pitch_variance": 0.0, "speech_rate": 0.0, "pauses": 0.0, "jitter": 0.0, "shimmer": 0.0},
             "semantic_drift_score": None
         }
 
@@ -316,7 +401,7 @@ async def analyze_assessment(
             audio_bytes = await audio_spontaneous.read()
             step4_result = await compute_spontaneous_analysis(audio_bytes)
         else:
-            step4_result = {"spontaneous_text": "", "idea_density": 50}
+            step4_result = {"spontaneous_text": "", "idea_density": 0.0}
     else:
         step4_result = {"spontaneous_text": "", "idea_density": None}
 
@@ -336,67 +421,72 @@ async def analyze_assessment(
 
     # 2. Immediate Recall
     def score_recall(original, answer):
-        if not original: return 0
-        if not answer: return 25 # Partial credit instead of 0 if missing
-        orig_words = [w.lower() for w in original]
-        ans_words = answer.lower().split()
+        if not original: return 0.0
+        if not answer or not answer.strip(): return 0.0
+        orig_words = [w.lower().strip() for w in original if w]
+        ans_words = [w.lower().strip() for w in answer.split() if w]
+        if not ans_words: return 0.0
         correct = sum(1 for w in orig_words if any(fuzz.ratio(w, uw) > 70 for uw in ans_words))
-        return (correct / len(orig_words)) * 100
+        return round((correct / len(orig_words)) * 100.0, 1)
 
     im_score = score_recall(immediate_recall.get("original", []), immediate_recall.get("answer", ""))
     scores['immediate_recall'] = None if 2 in skipped_steps else im_score
 
     # 3. Verbal Fluency (Semantic)
     semantic_fluency = fluency_test.get("semantic", "")
-    semantic_score = min(100, len(semantic_fluency.split()) * 5)
-    fluency_score = semantic_score
+    fluency_words = list(set([w.strip(".,!?;:\"").lower() for w in semantic_fluency.split() if len(w.strip(".,!?;:\"")) > 1]))
+    # 14+ unique category words in 60s is standard healthy benchmark (100%)
+    fluency_score = round(min(100.0, max(0.0, (len(fluency_words) / 14.0) * 100.0)), 1)
     scores['fluency'] = None if 3 in skipped_steps else fluency_score
 
     # 5. Paired Associate
-    paired_score = 0
-    if "original" in paired_test and "answers" in paired_test:
+    paired_score = 0.0
+    if "original" in paired_test and "answers" in paired_test and paired_test["original"]:
         total_pairs = len(paired_test["original"])
-        # Lowered fuzz threshold to 70 for leniency
-        correct = sum(1 for pair in paired_test["original"] if fuzz.ratio(pair["target"].lower(), paired_test["answers"].get(pair["cue"], "").lower()) > 70)
-        paired_score = (correct / total_pairs) * 100 if total_pairs else 0
+        correct = sum(1 for pair in paired_test["original"] if fuzz.ratio(pair["target"].lower().strip(), paired_test["answers"].get(pair["cue"], "").lower().strip()) > 70)
+        paired_score = round((correct / total_pairs) * 100.0, 1) if total_pairs else 0.0
     scores['paired_associate'] = None if 5 in skipped_steps else paired_score
 
     # 6. Delayed Recall
     del_score = score_recall(delayed_recall.get("original", []), delayed_recall.get("answer", ""))
     scores['delayed_recall'] = None if 6 in skipped_steps else del_score
-    
+
+    # Dynamic linguistic metrics (vocabulary, complexity, coherence, repetition)
+    combined_speech = (reading_text + " " + spontaneous_text).strip()
+    repetition_score = calculate_repetition_score(combined_speech)
+
     linguistic_features = {
-        "vocabulary": 50 if 3 in skipped_steps else min(100, semantic_score + 20),
-        "complexity": 50 if 4 in skipped_steps else idea_density,
-        "coherence": 50 if 1 in skipped_steps else semantic_drift_score,
-        "repetition": 85 # Placeholder
+        "vocabulary": 0.0 if 3 in skipped_steps else fluency_score,
+        "complexity": 0.0 if 4 in skipped_steps else (idea_density if idea_density is not None else 0.0),
+        "coherence": 0.0 if 1 in skipped_steps else (semantic_drift_score if semantic_drift_score is not None else 0.0),
+        "repetition": 0.0 if (1 in skipped_steps and 4 in skipped_steps) else repetition_score
     }
 
     # Final Fusion (Dynamic Weighting)
     memory_scores = [s for s in [scores['immediate_recall'], scores['delayed_recall'], scores['paired_associate']] if s is not None]
     language_scores = [s for s in [scores['idea_density'], scores['semantic_drift'], scores['fluency']] if s is not None]
-    
-    memory_fusion = sum(memory_scores) / len(memory_scores) if memory_scores else 50
-    language_fusion = sum(language_scores) / len(language_scores) if language_scores else 50
-    
-    # Base it only on the categories that were tested
-    if not memory_scores and not language_scores:
-        risk_probability = 5.0
+
+    # Rule: If the user skips all tests, risk score must be 100%
+    if (len(skipped_steps) == 6) or (not memory_scores and not language_scores):
+        risk_probability = 100.0
+        print("All tests skipped or no valid inputs provided -> Risk Probability = 100.0%")
     else:
+        memory_fusion = sum(memory_scores) / len(memory_scores) if memory_scores else 0.0
+        language_fusion = sum(language_scores) / len(language_scores) if language_scores else 0.0
+
         if not memory_scores:
-            final_score = language_fusion
+            final_cognitive_score = language_fusion
         elif not language_scores:
-            final_score = memory_fusion
+            final_cognitive_score = memory_fusion
         else:
-            final_score = (memory_fusion * 0.5) + (language_fusion * 0.5)
-            
-        calculated_risk = 100 - (final_score * 0.9)
-        
-        import random
-        if calculated_risk > 85:
-            risk_probability = random.uniform(85.0, 95.0)
-        else:
-            risk_probability = max(5.0, calculated_risk)
+            final_cognitive_score = (memory_fusion * 0.55) + (language_fusion * 0.45)
+
+        # Dynamic risk score: inversely proportional to cognitive performance
+        # 100% cognitive performance yields ~5% baseline risk
+        # 0% cognitive performance yields 100% risk
+        # Intermediate performance varies continuously and smoothly
+        calculated_risk = 100.0 - (final_cognitive_score * 0.95)
+        risk_probability = round(max(0.0, min(100.0, calculated_risk)), 1)
 
     print(f"Final Risk Probability: {risk_probability}%")
 
