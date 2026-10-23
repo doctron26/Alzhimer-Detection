@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, Brain, ArrowRight, Loader2, StopCircle, CheckCircle2, BookOpen, Clock, MapPin, Target, SkipForward } from "lucide-react";
+import { Mic, Brain, ArrowRight, Loader2, StopCircle, CheckCircle2, BookOpen, Clock, MapPin, Target, SkipForward, Activity, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -197,10 +197,14 @@ export default function Assessment() {
     });
   };
 
-  // Global State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [skippedSteps, setSkippedSteps] = useState<number[]>([]);
   const skippedStepsRef = useRef<number[]>([]);
+
+  // Real-time Calculation Progress & Timer State
+  const [calcProgress, setCalcProgress] = useState(0);
+  const [calcDuration, setCalcDuration] = useState("0.0");
+  const [calcStage, setCalcStage] = useState("Initializing neural assessment pipeline...");
 
   // --- Step 1: Paragraph Reading ---
   const [readingBlob, setReadingBlob] = useState<Blob | null>(null);
@@ -316,7 +320,35 @@ export default function Assessment() {
 
   const handleSubmit = async (passedSkipped?: number[] | React.MouseEvent) => {
     setIsSubmitting(true);
-    
+    setCalcProgress(12);
+    setCalcStage("Securing clinical telemetry & audio recordings...");
+
+    const startTime = performance.now();
+    let currentProgress = 12;
+
+    // Real-time stopwatch ticker running every 50ms
+    const timerInterval = setInterval(() => {
+      const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+      setCalcDuration(elapsed);
+    }, 50);
+
+    // Progressive pipeline stage simulation while computation completes
+    const progressInterval = setInterval(() => {
+      if (currentProgress < 92) {
+        currentProgress += Math.random() * 7 + 3;
+        if (currentProgress > 92) currentProgress = 92;
+        setCalcProgress(currentProgress);
+
+        if (currentProgress > 75) {
+          setCalcStage("Synthesizing multi-modal memory & cognitive biomarkers...");
+        } else if (currentProgress > 50) {
+          setCalcStage("Evaluating semantic drift, linguistic density & coherence...");
+        } else if (currentProgress > 25) {
+          setCalcStage("Extracting acoustic biomarkers & Whisper speech features...");
+        }
+      }
+    }, 320);
+
     try {
       const activeSkipped = Array.isArray(passedSkipped) 
         ? passedSkipped 
@@ -391,11 +423,24 @@ export default function Assessment() {
       const response = await fetch("/api/analyze", { method: "POST", body: formData });
       const result = await response.json();
       
+      clearInterval(progressInterval);
+      clearInterval(timerInterval);
+
+      const totalElapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+      setCalcDuration(totalElapsed);
+      setCalcProgress(100);
+      setCalcStage(`✨ Calculation completed in ${totalElapsed}s! Generating Clinical Dashboard...`);
+
       if (result && result.success) {
+        result.calculation_duration = `${totalElapsed}s`;
         sessionStorage.setItem('assessmentResult', JSON.stringify(result));
       }
+
+      await new Promise(resolve => setTimeout(resolve, 800));
       router.push("/results");
     } catch (error) {
+      clearInterval(progressInterval);
+      clearInterval(timerInterval);
       console.error("Error submitting:", error);
       alert("Failed to submit data.");
       setIsSubmitting(false);
@@ -430,7 +475,68 @@ export default function Assessment() {
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 pb-4 custom-scrollbar flex flex-col justify-center">
-          <AnimatePresence mode="wait">
+          {isSubmitting ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="glass-card p-8 md:p-12 rounded-[3rem] bg-white max-w-xl mx-auto border border-slate-200 w-full text-center shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-48 h-48 bg-primary-200/40 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-200/40 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="relative z-10">
+                <div className="relative inline-flex p-5 rounded-3xl bg-primary-50 text-primary-600 border border-primary-100 mb-6 shadow-sm">
+                  <Brain className="w-10 h-10 animate-pulse text-primary-600" />
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500"></span>
+                  </span>
+                </div>
+
+                <h2 className="text-2xl md:text-3xl font-display font-black text-slate-900 mb-2">
+                  Processing Diagnostics
+                </h2>
+                <p className="text-slate-500 text-sm font-medium mb-8">
+                  Extracting acoustic features, NLP linguistic models, and multi-domain risk scores.
+                </p>
+
+                {/* Real-Time Stopwatch Display */}
+                <div className="bg-slate-50/80 backdrop-blur-sm border border-slate-200 rounded-2xl p-4 mb-6 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 text-slate-700 font-bold text-sm">
+                    <Clock className="w-4 h-4 text-primary-600 animate-spin" style={{ animationDuration: '3s' }} />
+                    <span>Calculation Time</span>
+                  </div>
+                  <div className="flex items-baseline gap-1 font-mono font-black text-2xl text-primary-700">
+                    <span>{calcDuration}</span>
+                    <span className="text-xs font-bold text-slate-400 font-sans">sec</span>
+                  </div>
+                </div>
+
+                {/* Progress Bar Container */}
+                <div className="w-full bg-slate-100 rounded-full h-4 p-0.5 border border-slate-200 mb-3 overflow-hidden shadow-inner">
+                  <motion.div 
+                    className="h-full rounded-full bg-gradient-to-r from-primary-500 via-indigo-500 to-emerald-500 transition-all duration-300 ease-out"
+                    style={{ width: `${calcProgress}%` }}
+                  />
+                </div>
+
+                {/* Progress Details & Status */}
+                <div className="flex justify-between items-center text-xs font-bold mb-6 text-slate-400">
+                  <span className="text-primary-600 flex items-center gap-1.5 truncate max-w-[80%] text-left font-medium">
+                    <Activity className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    <span className="truncate">{calcStage}</span>
+                  </span>
+                  <span className="font-mono text-slate-700 font-bold">{Math.round(calcProgress)}%</span>
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  Generating standardized clinical biomarkers & risk report...
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <AnimatePresence mode="wait">
             
             {/* STEP 1: Paragraph Reading */}
             {step === 1 && (
@@ -468,7 +574,7 @@ export default function Assessment() {
                 <div className="text-center mb-8">
                   <div className="inline-flex p-4 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 mb-4"><Brain className="w-8 h-8" /></div>
                   <h2 className="text-3xl font-display font-bold mb-2">Immediate Word Recall</h2>
-                  <p className="text-slate-600">{subStep === 'memorize' ? "Memorize these 5 unrelated words. You will be asked to recall them later." : "Type the 5 words you just memorized."}</p>
+                  <p className="text-slate-600">{subStep === 'memorize' ? "Memorize these 5 unrelated words. You will be asked to recall them later." : "Type the 5 words you just memorized. Please separate each word with a comma."}</p>
                 </div>
                 {subStep === 'memorize' ? (
                   <>
@@ -481,7 +587,16 @@ export default function Assessment() {
                   </>
                 ) : (
                   <>
-                    <input type="text" value={immediateRecall} onChange={e => setImmediateRecall(e.target.value)} placeholder="Word1 Word2 Word3..." className="w-full p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 focus:border-indigo-500 outline-none mb-8 text-lg" />
+                    <input 
+                      type="text" 
+                      value={immediateRecall} 
+                      onChange={e => setImmediateRecall(e.target.value)} 
+                      placeholder="e.g. Apple, Table, Penny, Elephant, River" 
+                      className="w-full p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 focus:border-indigo-500 outline-none mb-2 text-lg" 
+                    />
+                    <p className="text-xs text-indigo-600 font-semibold mb-6 flex items-center justify-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" /> Please add a comma after every word (e.g. Word1, Word2, Word3)
+                    </p>
                     <button onClick={() => handleNextStep(2)} className="w-full bg-slate-900 text-white py-4 rounded-full font-bold">Continue</button>
                   </>
                 )}
@@ -500,14 +615,23 @@ export default function Assessment() {
                 {!fluencyActive && fluencyTimer === 60 ? (
                   <>
                     <p className="text-slate-600 mb-8">
-                      You will have 60 seconds to name as many {currentFluencyCategory} as you can. Separate by commas or spaces.
+                      You will have 60 seconds to name as many {currentFluencyCategory} as you can. Please separate each word with a comma.
                     </p>
                     <button onClick={() => setFluencyActive(true)} className="bg-emerald-600 text-white px-10 py-4 rounded-full font-bold text-lg">Start 60s Timer</button>
                   </>
                 ) : (
                   <>
                     <div className="text-4xl font-black text-emerald-600 mb-4">{fluencyTimer}s</div>
-                    <textarea value={semanticFluency} onChange={e => setSemanticFluency(e.target.value)} disabled={!fluencyActive} className="w-full h-40 p-4 rounded-xl border border-slate-200 bg-slate-50 mb-6" placeholder="Dog, Cat, Elephant..." />
+                    <textarea 
+                      value={semanticFluency} 
+                      onChange={e => setSemanticFluency(e.target.value)} 
+                      disabled={!fluencyActive} 
+                      className="w-full h-40 p-4 rounded-xl border border-slate-200 bg-slate-50 mb-2" 
+                      placeholder="e.g. Dog, Cat, Elephant, Lion, Tiger..." 
+                    />
+                    <p className="text-xs text-emerald-600 font-semibold mb-4 flex items-center justify-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" /> Please add a comma after every word
+                    </p>
                     
                     {!fluencyActive && fluencyTimer === 0 && (
                       <button onClick={() => handleNextStep(3)} className="w-full bg-slate-900 text-white py-4 rounded-full font-bold">Continue to Next Test</button>
@@ -598,12 +722,21 @@ export default function Assessment() {
               <motion.div key="s6" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="glass-card p-8 rounded-[3rem] bg-white max-w-3xl mx-auto border border-slate-200 w-full text-center">
                 <div className="inline-flex p-4 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 mb-4"><Brain className="w-8 h-8" /></div>
                 <h2 className="text-3xl font-display font-bold mb-4">Final Word Recall</h2>
-                <p className="text-slate-600 mb-8">Type the 5 unrelated words you memorized at the very beginning of the assessment.</p>
+                <p className="text-slate-600 mb-6">Type the 5 unrelated words you memorized at the very beginning of the assessment. Please add a comma after every word.</p>
                 
-                <input type="text" value={delayedRecall} onChange={e => setDelayedRecall(e.target.value)} placeholder="Word1 Word2 Word3..." className="w-full max-w-md mx-auto block p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 focus:border-indigo-500 outline-none mb-8 text-lg" />
+                <input 
+                  type="text" 
+                  value={delayedRecall} 
+                  onChange={e => setDelayedRecall(e.target.value)} 
+                  placeholder="e.g. Apple, Table, Penny, Elephant, River" 
+                  className="w-full max-w-md mx-auto block p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 focus:border-indigo-500 outline-none mb-2 text-lg" 
+                />
+                <p className="text-xs text-indigo-600 font-semibold mb-8 flex items-center justify-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" /> Please add a comma after every word (e.g. Word1, Word2, Word3)
+                </p>
                 
                 <button onClick={() => handleSubmit()} disabled={isSubmitting} className="bg-slate-900 text-white px-10 py-5 rounded-full font-bold text-xl flex items-center justify-center gap-2 mx-auto disabled:opacity-70">
-                  {isSubmitting ? <><Loader2 className="animate-spin"/> Processing Analysis...</> : "Submit Assessment"}
+                  Submit Assessment
                 </button>
                 <div className="mt-8 pt-6 border-t border-slate-100 text-center">
                     <button onClick={() => handleSkip(6)} className="text-slate-400 hover:text-slate-600 font-semibold flex items-center justify-center gap-2 mx-auto"><SkipForward className="w-4 h-4"/> Skip & Submit</button>
@@ -612,6 +745,7 @@ export default function Assessment() {
             )}
 
           </AnimatePresence>
+          )}
         </div>
       </div>
     </div>

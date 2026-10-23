@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Target, Brain, Mic, ShieldCheck, Activity, Calendar, User, FileText, TrendingUp, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Target, Brain, Mic, ShieldCheck, Activity, Calendar, User, FileText, TrendingUp, AlertTriangle, Clock } from "lucide-react";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Tooltip, Legend, ReferenceLine, LabelList, PolarRadiusAxis } from 'recharts';
 
 export default function Results() {
@@ -89,9 +89,14 @@ export default function Results() {
                   <ShieldCheck className="w-4 h-4" /> Verified
                 </div>
               </div>
-              <p className="text-slate-500 font-medium flex items-center gap-4 text-sm">
+              <p className="text-slate-500 font-medium flex flex-wrap items-center gap-4 text-sm">
                 <span className="flex items-center gap-1.5"><User className="w-4 h-4" /> {patientInfo ? `${patientInfo.name} (Age: ${patientInfo.age}, Gender: ${patientInfo.gender})` : 'Patient ID: 894-AX2'}</span>
                 <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {currentDate}</span>
+                {resultData?.calculation_duration && (
+                  <span className="flex items-center gap-1.5 text-primary-700 bg-primary-50 px-2.5 py-0.5 rounded-full text-xs font-semibold border border-primary-200">
+                    <Clock className="w-3.5 h-3.5 text-primary-500" /> Computed in {resultData.calculation_duration}
+                  </span>
+                )}
               </p>
             </div>
           </div>

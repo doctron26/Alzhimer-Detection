@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import time
 import json
 import os
+import re
 import tempfile
 import gc
 from google import genai
@@ -421,12 +422,13 @@ async def analyze_assessment(
     scores['semantic_drift'] = semantic_drift_score
     scores['idea_density'] = idea_density
 
-    # Helper for recall scoring
+    # Helper for recall scoring (supports comma-separated or space-separated words)
     def score_recall(original, answer):
         if not original: return 0.0
         if not answer or not answer.strip(): return 0.0
-        orig_words = [w.lower().strip() for w in original if w]
-        ans_words = [w.lower().strip() for w in answer.split() if w]
+        orig_words = [w.lower().strip(".,!?;:\"' ") for w in original if w]
+        raw_words = re.split(r'[,;\s]+', answer)
+        ans_words = [w.lower().strip(".,!?;:\"' ") for w in raw_words if w.strip(".,!?;:\"' ")]
         if not ans_words: return 0.0
         correct = sum(1 for w in orig_words if any(fuzz.ratio(w, uw) > 70 for uw in ans_words))
         return round((correct / len(orig_words)) * 100.0, 1)
