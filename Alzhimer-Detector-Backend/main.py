@@ -370,7 +370,8 @@ async def analyze_assessment(
     scores = {}
 
     # Step 1: Check precomputed background task or fallback
-    if 1 not in skipped_steps:
+    has_audio_1 = bool(audio_reading or (session and session.get("step1_task")))
+    if 1 not in skipped_steps and has_audio_1:
         if session and session.get("step1_task"):
             print(f"--- [PROGRESSIVE ML] Cache hit: Awaiting precomputed Step 1 for session {session_id} ---")
             step1_result = await session["step1_task"]
@@ -382,7 +383,7 @@ async def analyze_assessment(
             step1_result = {
                 "reading_text": "",
                 "acoustic_features": {"pitch_variance": 0.0, "speech_rate": 0.0, "pauses": 0.0, "jitter": 0.0, "shimmer": 0.0},
-                "semantic_drift_score": 0.0
+                "semantic_drift_score": None
             }
     else:
         step1_result = {
@@ -392,7 +393,8 @@ async def analyze_assessment(
         }
 
     # Step 4: Check precomputed background task or fallback
-    if 4 not in skipped_steps:
+    has_audio_4 = bool(audio_spontaneous or (session and session.get("step4_task")))
+    if 4 not in skipped_steps and has_audio_4:
         if session and session.get("step4_task"):
             print(f"--- [PROGRESSIVE ML] Cache hit: Awaiting precomputed Step 4 for session {session_id} ---")
             step4_result = await session["step4_task"]
@@ -401,7 +403,7 @@ async def analyze_assessment(
             audio_bytes = await audio_spontaneous.read()
             step4_result = await compute_spontaneous_analysis(audio_bytes)
         else:
-            step4_result = {"spontaneous_text": "", "idea_density": 0.0}
+            step4_result = {"spontaneous_text": "", "idea_density": None}
     else:
         step4_result = {"spontaneous_text": "", "idea_density": None}
 
@@ -409,17 +411,17 @@ async def analyze_assessment(
     if session_id:
         PRECOMPUTE_CACHE.pop(session_id, None)
 
-    reading_text = step1_result["reading_text"]
-    acoustic_features = step1_result["acoustic_features"]
-    semantic_drift_score = step1_result["semantic_drift_score"]
+    reading_text = step1_result.get("reading_text", "")
+    acoustic_features = step1_result.get("acoustic_features", {"pitch_variance": 0.0, "speech_rate": 0.0, "pauses": 0.0, "jitter": 0.0, "shimmer": 0.0})
+    semantic_drift_score = step1_result.get("semantic_drift_score")
 
-    spontaneous_text = step4_result["spontaneous_text"]
-    idea_density = step4_result["idea_density"]
+    spontaneous_text = step4_result.get("spontaneous_text", "")
+    idea_density = step4_result.get("idea_density")
 
     scores['semantic_drift'] = semantic_drift_score
     scores['idea_density'] = idea_density
 
-    # 2. Immediate Recall
+    # Helper for recall scoring
     def score_recall(original, answer):
         if not original: return 0.0
         if not answer or not answer.strip(): return 0.0
@@ -429,64 +431,74 @@ async def analyze_assessment(
         correct = sum(1 for w in orig_words if any(fuzz.ratio(w, uw) > 70 for uw in ans_words))
         return round((correct / len(orig_words)) * 100.0, 1)
 
-    im_score = score_recall(immediate_recall.get("original", []), immediate_recall.get("answer", ""))
-    scores['immediate_recall'] = None if 2 in skipped_steps else im_score
+    # 2. Immediate Recall
+    im_answer = immediate_recall.get("answer", "") if isinstance(immediate_recall, dict) else ""
+    if 2 in skipped_steps or not im_answer or not im_answer.strip():
+        scores['immediate_recall'] = None
+    else:
+        scores['immediate_recall'] = score_recall(immediate_recall.get("original", []), im_answer)
 
     # 3. Verbal Fluency (Semantic)
-    semantic_fluency = fluency_test.get("semantic", "")
-    fluency_words = list(set([w.strip(".,!?;:\"").lower() for w in semantic_fluency.split() if len(w.strip(".,!?;:\"")) > 1]))
-    # 14+ unique category words in 60s is standard healthy benchmark (100%)
-    fluency_score = round(min(100.0, max(0.0, (len(fluency_words) / 14.0) * 100.0)), 1)
-    scores['fluency'] = None if 3 in skipped_steps else fluency_score
+    sem_text = fluency_test.get("semantic", "") if isinstance(fluency_test, dict) else ""
+    if 3 in skipped_steps or not sem_text or not sem_text.strip():
+        scores['fluency'] = None
+    else:
+        fluency_words = list(set([w.strip(".,!?;:\"").lower() for w in sem_text.split() if len(w.strip(".,!?;:\"")) > 1]))
+        scores['fluency'] = round(min(100.0, max(0.0, (len(fluency_words) / 14.0) * 100.0)), 1)
 
     # 5. Paired Associate
-    paired_score = 0.0
-    if "original" in paired_test and "answers" in paired_test and paired_test["original"]:
-        total_pairs = len(paired_test["original"])
-        correct = sum(1 for pair in paired_test["original"] if fuzz.ratio(pair["target"].lower().strip(), paired_test["answers"].get(pair["cue"], "").lower().strip()) > 70)
-        paired_score = round((correct / total_pairs) * 100.0, 1) if total_pairs else 0.0
-    scores['paired_associate'] = None if 5 in skipped_steps else paired_score
+    paired_ans = paired_test.get("answers", {}) if isinstance(paired_test, dict) else {}
+    if 5 in skipped_steps or not paired_ans:
+        scores['paired_associate'] = None
+    else:
+        paired_score = 0.0
+        if "original" in paired_test and paired_test["original"]:
+            total_pairs = len(paired_test["original"])
+            correct = sum(1 for pair in paired_test["original"] if fuzz.ratio(pair["target"].lower().strip(), paired_ans.get(pair["cue"], "").lower().strip()) > 70)
+            paired_score = round((correct / total_pairs) * 100.0, 1) if total_pairs else 0.0
+        scores['paired_associate'] = paired_score
 
     # 6. Delayed Recall
-    del_score = score_recall(delayed_recall.get("original", []), delayed_recall.get("answer", ""))
-    scores['delayed_recall'] = None if 6 in skipped_steps else del_score
+    del_answer = delayed_recall.get("answer", "") if isinstance(delayed_recall, dict) else ""
+    if 6 in skipped_steps or not del_answer or not del_answer.strip():
+        scores['delayed_recall'] = None
+    else:
+        scores['delayed_recall'] = score_recall(delayed_recall.get("original", []), del_answer)
 
     # Dynamic linguistic metrics (vocabulary, complexity, coherence, repetition)
     combined_speech = (reading_text + " " + spontaneous_text).strip()
-    repetition_score = calculate_repetition_score(combined_speech)
+    repetition_score = calculate_repetition_score(combined_speech) if combined_speech else 0.0
 
     linguistic_features = {
-        "vocabulary": 0.0 if 3 in skipped_steps else fluency_score,
-        "complexity": 0.0 if 4 in skipped_steps else (idea_density if idea_density is not None else 0.0),
-        "coherence": 0.0 if 1 in skipped_steps else (semantic_drift_score if semantic_drift_score is not None else 0.0),
-        "repetition": 0.0 if (1 in skipped_steps and 4 in skipped_steps) else repetition_score
+        "vocabulary": 0.0 if scores['fluency'] is None else scores['fluency'],
+        "complexity": 0.0 if idea_density is None else idea_density,
+        "coherence": 0.0 if semantic_drift_score is None else semantic_drift_score,
+        "repetition": repetition_score
     }
 
-    # Final Fusion (Dynamic Weighting)
+    # Final Fusion (Dynamic Weighting based ONLY on completed tests)
     memory_scores = [s for s in [scores['immediate_recall'], scores['delayed_recall'], scores['paired_associate']] if s is not None]
     language_scores = [s for s in [scores['idea_density'], scores['semantic_drift'], scores['fluency']] if s is not None]
+    all_completed_scores = memory_scores + language_scores
 
-    # Rule: If the user skips all tests, risk score must be 100%
-    if (len(skipped_steps) == 6) or (not memory_scores and not language_scores):
+    # If the user skipped or omitted all tests, risk score is 100%
+    if not all_completed_scores or len(skipped_steps) >= 6:
         risk_probability = 100.0
         print("All tests skipped or no valid inputs provided -> Risk Probability = 100.0%")
     else:
-        memory_fusion = sum(memory_scores) / len(memory_scores) if memory_scores else 0.0
-        language_fusion = sum(language_scores) / len(language_scores) if language_scores else 0.0
-
-        if not memory_scores:
-            final_cognitive_score = language_fusion
-        elif not language_scores:
-            final_cognitive_score = memory_fusion
-        else:
+        if memory_scores and language_scores:
+            memory_fusion = sum(memory_scores) / len(memory_scores)
+            language_fusion = sum(language_scores) / len(language_scores)
             final_cognitive_score = (memory_fusion * 0.55) + (language_fusion * 0.45)
+        elif memory_scores:
+            final_cognitive_score = sum(memory_scores) / len(memory_scores)
+        else:
+            final_cognitive_score = sum(language_scores) / len(language_scores)
 
-        # Dynamic risk score: inversely proportional to cognitive performance
-        # 100% cognitive performance yields ~5% baseline risk
-        # 0% cognitive performance yields 100% risk
-        # Intermediate performance varies continuously and smoothly
+        # Dynamic risk score: inversely proportional to cognitive performance on completed tests
         calculated_risk = 100.0 - (final_cognitive_score * 0.95)
-        risk_probability = round(max(0.0, min(100.0, calculated_risk)), 1)
+        risk_probability = round(max(5.0, min(100.0, calculated_risk)), 1)
+        print(f"Calculated from {len(all_completed_scores)} completed test(s) -> Final Risk Probability: {risk_probability}%")
 
     print(f"Final Risk Probability: {risk_probability}%")
 

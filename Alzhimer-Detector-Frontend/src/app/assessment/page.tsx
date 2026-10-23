@@ -200,6 +200,7 @@ export default function Assessment() {
   // Global State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [skippedSteps, setSkippedSteps] = useState<number[]>([]);
+  const skippedStepsRef = useRef<number[]>([]);
 
   // --- Step 1: Paragraph Reading ---
   const [readingBlob, setReadingBlob] = useState<Blob | null>(null);
@@ -285,68 +286,103 @@ export default function Assessment() {
   const [delayedRecall, setDelayedRecall] = useState("");
 
   const handleSkip = (currentStep: number) => {
-    setSkippedSteps(prev => [...prev, currentStep]);
-    handleNextStep(currentStep);
+    const updated = skippedStepsRef.current.includes(currentStep)
+      ? skippedStepsRef.current
+      : [...skippedStepsRef.current, currentStep];
+    skippedStepsRef.current = updated;
+    setSkippedSteps(updated);
+    handleNextStep(currentStep, updated);
   };
 
-  const handleNextStep = (currentStep: number) => {
+  const handleNextStep = (currentStep: number, passedSkipped?: number[]) => {
     if (isRecording) handleStopRecording();
     setSubStep('memorize');
     
+    const activeSkipped = passedSkipped || skippedStepsRef.current;
+
     // Background precomputation trigger on advance
-    if (currentStep === 1 && readingBlob) {
+    if (currentStep === 1 && readingBlob && !activeSkipped.includes(1)) {
       triggerPrecomputeStep1(readingBlob);
-    } else if (currentStep === 4 && spontaneousBlob) {
+    } else if (currentStep === 4 && spontaneousBlob && !activeSkipped.includes(4)) {
       triggerPrecomputeStep4(spontaneousBlob);
     }
 
     if (currentStep === 6) {
-       handleSubmit();
+       handleSubmit(activeSkipped);
     } else {
        setStep(currentStep + 1);
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (passedSkipped?: number[] | React.MouseEvent) => {
     setIsSubmitting(true);
     
     try {
+      const activeSkipped = Array.isArray(passedSkipped) 
+        ? passedSkipped 
+        : (skippedStepsRef.current.length ? skippedStepsRef.current : skippedSteps);
       const supabase = createClient();
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData?.user?.id || 'anonymous';
       const timestamp = Date.now();
 
       // 1. Upload to Supabase Storage if the bucket exists
-      if (readingBlob && !skippedSteps.includes(1)) {
-        await supabase.storage
+      if (readingBlob && !activeSkipped.includes(1)) {
+        const { data: rData, error: rErr } = await supabase.storage
           .from('audio-recordings')
           .upload(`${userId}/${timestamp}_reading.webm`, readingBlob, {
             contentType: 'audio/webm',
             upsert: false
-          }).catch(err => console.error("Failed to upload reading audio to Supabase:", err));
+          });
+        if (rErr) {
+          console.error("❌ Failed to upload reading audio to Supabase:", rErr);
+        } else {
+          console.log("✅ Successfully uploaded reading audio to Supabase:", rData);
+        }
       }
 
-      if (spontaneousBlob && !skippedSteps.includes(4)) {
-        await supabase.storage
+      if (spontaneousBlob && !activeSkipped.includes(4)) {
+        const { data: sData, error: sErr } = await supabase.storage
           .from('audio-recordings')
           .upload(`${userId}/${timestamp}_spontaneous.webm`, spontaneousBlob, {
             contentType: 'audio/webm',
             upsert: false
-          }).catch(err => console.error("Failed to upload spontaneous audio to Supabase:", err));
+          });
+        if (sErr) {
+          console.error("❌ Failed to upload spontaneous audio to Supabase:", sErr);
+        } else {
+          console.log("✅ Successfully uploaded spontaneous audio to Supabase:", sData);
+        }
       }
 
-      // 2. Send data to the Python backend for analysis (uses instant precomputed cache)
+      // 2. Identify all genuinely skipped or unattempted tasks
+      const isStep2Skipped = activeSkipped.includes(2) || !immediateRecall.trim();
+      const isStep3Skipped = activeSkipped.includes(3) || !semanticFluency.trim();
+      const isStep5Skipped = activeSkipped.includes(5) || Object.keys(pairedAnswers).length === 0;
+      const isStep6Skipped = activeSkipped.includes(6) || !delayedRecall.trim();
+
+      const allSkippedSet = new Set(activeSkipped);
+      if (isStep2Skipped) allSkippedSet.add(2);
+      if (isStep3Skipped) allSkippedSet.add(3);
+      if (isStep5Skipped) allSkippedSet.add(5);
+      if (isStep6Skipped) allSkippedSet.add(6);
+      if (!readingBlob) allSkippedSet.add(1);
+      if (!spontaneousBlob) allSkippedSet.add(4);
+
+      const resolvedSkipped = Array.from(allSkippedSet);
+
+      // 3. Send data to the Python backend for analysis (uses instant precomputed cache)
       const formData = new FormData();
-      if (readingBlob && !skippedSteps.includes(1)) formData.append("audio_reading", readingBlob, "reading.webm");
-      if (spontaneousBlob && !skippedSteps.includes(4)) formData.append("audio_spontaneous", spontaneousBlob, "spontaneous.webm");
+      if (readingBlob && !allSkippedSet.has(1)) formData.append("audio_reading", readingBlob, "reading.webm");
+      if (spontaneousBlob && !allSkippedSet.has(4)) formData.append("audio_spontaneous", spontaneousBlob, "spontaneous.webm");
       
       const writtenData = {
         sessionId: sessionId,
-        skippedSteps: skippedSteps,
-        immediateRecall: skippedSteps.includes(2) ? null : { original: currentWords, answer: immediateRecall },
-        fluencyTest: skippedSteps.includes(3) ? null : { semantic: semanticFluency },
-        pairedTest: skippedSteps.includes(5) ? null : { original: currentPairedWords, answers: pairedAnswers },
-        delayedRecall: skippedSteps.includes(6) ? null : { original: currentWords, answer: delayedRecall },
+        skippedSteps: resolvedSkipped,
+        immediateRecall: isStep2Skipped ? null : { original: currentWords, answer: immediateRecall },
+        fluencyTest: isStep3Skipped ? null : { semantic: semanticFluency },
+        pairedTest: isStep5Skipped ? null : { original: currentPairedWords, answers: pairedAnswers },
+        delayedRecall: isStep6Skipped ? null : { original: currentWords, answer: delayedRecall },
         readingText: currentParagraph
       };
       
@@ -355,7 +391,7 @@ export default function Assessment() {
       const response = await fetch("/api/analyze", { method: "POST", body: formData });
       const result = await response.json();
       
-      if (result.success) {
+      if (result && result.success) {
         sessionStorage.setItem('assessmentResult', JSON.stringify(result));
       }
       router.push("/results");
@@ -566,7 +602,7 @@ export default function Assessment() {
                 
                 <input type="text" value={delayedRecall} onChange={e => setDelayedRecall(e.target.value)} placeholder="Word1 Word2 Word3..." className="w-full max-w-md mx-auto block p-4 rounded-2xl border-2 border-slate-200 bg-slate-50 focus:border-indigo-500 outline-none mb-8 text-lg" />
                 
-                <button onClick={handleSubmit} disabled={isSubmitting} className="bg-slate-900 text-white px-10 py-5 rounded-full font-bold text-xl flex items-center justify-center gap-2 mx-auto disabled:opacity-70">
+                <button onClick={() => handleSubmit()} disabled={isSubmitting} className="bg-slate-900 text-white px-10 py-5 rounded-full font-bold text-xl flex items-center justify-center gap-2 mx-auto disabled:opacity-70">
                   {isSubmitting ? <><Loader2 className="animate-spin"/> Processing Analysis...</> : "Submit Assessment"}
                 </button>
                 <div className="mt-8 pt-6 border-t border-slate-100 text-center">
