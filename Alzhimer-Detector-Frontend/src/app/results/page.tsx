@@ -25,11 +25,7 @@ export default function Results() {
 
   const handlePrint = () => window.print();
 
-  // ML Biomarkers Safely Extracted
-  const riskProbability = resultData?.risk_probability !== undefined ? Math.round(resultData.risk_probability) : 100;
-  const isHighRisk = riskProbability > 50;
-
-  // Episodic Memory Breakdown
+  // Episodic Memory & Cognitive Scores Breakdown
   const immediateScore = resultData?.scores?.immediate_recall;
   const delayedScore = resultData?.scores?.delayed_recall;
   const pairedScore = resultData?.scores?.paired_associate;
@@ -40,8 +36,15 @@ export default function Results() {
     { name: 'Paired', value: pairedScore !== null ? Math.round(pairedScore ?? 0) : 0, color: '#f59e0b', skipped: pairedScore === null },
   ].filter(d => !d.skipped);
 
-  // Check if all tests were skipped
-  const isAllSkipped = riskProbability === 100 && (!resultData?.scores || Object.values(resultData.scores).every(v => v === null));
+  // Check if all diagnostic tests were skipped or missing
+  const allScoresNull = !resultData?.scores || Object.values(resultData.scores).every(v => v === null);
+  const isAllSkipped = allScoresNull || (resultData?.risk_probability === 100 && (!resultData?.scores || Object.values(resultData.scores).filter(v => v !== null).length === 0));
+
+  // ML Biomarkers Safely Extracted (Strict 100% risk when all tasks are skipped)
+  const riskProbability = isAllSkipped 
+    ? 100 
+    : (resultData?.risk_probability !== undefined ? Math.round(resultData.risk_probability) : 100);
+  const isHighRisk = riskProbability > 50;
 
   // Acoustic Features (Jitter, Shimmer, Pitch Variance)
   const acousticDataRaw = resultData?.acoustic_data || { pitch_variance: 0, speech_rate: 0, pauses: 0, jitter: 0, shimmer: 0 };

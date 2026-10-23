@@ -165,6 +165,9 @@ export default function Assessment() {
   const [sessionId, setSessionId] = useState<string>("");
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem('assessmentResult');
+    }
     setSessionId(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
     setCurrentParagraph(getRandomItem(PARAGRAPHS));
     setCurrentWords(getRandomItem(WORD_POOLS));
@@ -390,7 +393,7 @@ export default function Assessment() {
       // 2. Identify all genuinely skipped or unattempted tasks
       const isStep2Skipped = activeSkipped.includes(2) || !immediateRecall.trim();
       const isStep3Skipped = activeSkipped.includes(3) || !semanticFluency.trim();
-      const isStep5Skipped = activeSkipped.includes(5) || Object.keys(pairedAnswers).length === 0;
+      const isStep5Skipped = activeSkipped.includes(5) || Object.keys(pairedAnswers).length === 0 || Object.values(pairedAnswers).every(v => !v.trim());
       const isStep6Skipped = activeSkipped.includes(6) || !delayedRecall.trim();
 
       const allSkippedSet = new Set(activeSkipped);

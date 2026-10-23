@@ -41,6 +41,8 @@ export default function PatientInfo() {
       ...formData,
       timestamp: Date.now()
     };
+    // Clear previous assessment result on new patient start
+    sessionStorage.removeItem("assessmentResult");
     sessionStorage.setItem("currentPatient", JSON.stringify(patientData));
     
     try {
