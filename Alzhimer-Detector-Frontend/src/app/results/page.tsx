@@ -30,11 +30,50 @@ export default function Results() {
   const delayedScore = resultData?.scores?.delayed_recall;
   const pairedScore = resultData?.scores?.paired_associate;
   
-  const dynamicMemoryData = [
-    { name: 'Immediate', value: immediateScore !== null ? Math.round(immediateScore ?? 0) : 0, color: '#10b981', skipped: immediateScore === null },
-    { name: 'Delayed', value: delayedScore !== null ? Math.round(delayedScore ?? 0) : 0, color: '#3b82f6', skipped: delayedScore === null },
-    { name: 'Paired', value: pairedScore !== null ? Math.round(pairedScore ?? 0) : 0, color: '#f59e0b', skipped: pairedScore === null },
-  ].filter(d => !d.skipped);
+  const memoryItems = [
+    {
+      id: 'immediate',
+      name: 'Immediate Recall',
+      shortName: 'Immediate',
+      domain: 'Working / Episodic Encoding',
+      value: immediateScore !== null && immediateScore !== undefined ? Math.round(immediateScore) : null,
+      color: '#10b981', // emerald-500
+      radius: 82,
+      circumference: 2 * Math.PI * 82, // ~515.22
+    },
+    {
+      id: 'delayed',
+      name: 'Delayed Recall',
+      shortName: 'Delayed',
+      domain: 'Consolidation & Retrieval',
+      value: delayedScore !== null && delayedScore !== undefined ? Math.round(delayedScore) : null,
+      color: '#3b82f6', // blue-500
+      radius: 66,
+      circumference: 2 * Math.PI * 66, // ~414.69
+    },
+    {
+      id: 'paired',
+      name: 'Paired Associate',
+      shortName: 'Paired',
+      domain: 'Cued Associative Learning',
+      value: pairedScore !== null && pairedScore !== undefined ? Math.round(pairedScore) : null,
+      color: '#f59e0b', // amber-500
+      radius: 50,
+      circumference: 2 * Math.PI * 50, // ~314.16
+    },
+  ];
+
+  const validMemoryScores = memoryItems.filter(m => m.value !== null).map(m => m.value as number);
+  const avgMemoryScore = validMemoryScores.length > 0
+    ? Math.round(validMemoryScores.reduce((a, b) => a + b, 0) / validMemoryScores.length)
+    : 0;
+
+  const getMemoryStatus = (val: number | null) => {
+    if (val === null) return { label: 'Skipped', badge: 'bg-slate-100 text-slate-500 border-slate-200' };
+    if (val >= 80) return { label: 'Optimal', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    if (val >= 60) return { label: 'Borderline', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
+    return { label: 'Impaired', badge: 'bg-rose-50 text-rose-700 border-rose-200' };
+  };
 
   // Check if all diagnostic tests were skipped or missing
   const allScoresNull = !resultData?.scores || Object.values(resultData.scores).every(v => v === null);
@@ -192,34 +231,111 @@ export default function Results() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:grid-cols-3">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="lg:col-span-1 glass-card p-8 rounded-[2rem] bg-white flex flex-col shadow-sm border border-slate-100 print:shadow-none">
-            <div className="mb-6"><h3 className="text-xl font-bold">Memory Breakdown</h3><p className="text-sm text-slate-500">Immediate vs. Delayed Recall</p></div>
-            <div className="h-[250px] w-full relative mb-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ fontWeight: 'bold' }} />
-                  <Pie data={dynamicMemoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={5} dataKey="value" stroke="none" labelLine={false} label={({ cx = 0, cy = 0, midAngle = 0, innerRadius = 0, outerRadius = 0, value = 0 }: any) => {
-                    const radius = Number(innerRadius) + (Number(outerRadius) - Number(innerRadius)) * 0.5;
-                    const angle = Number(midAngle);
-                    const x = Number(cx) + radius * Math.cos(-angle * Math.PI / 180);
-                    const y = Number(cy) + radius * Math.sin(-angle * Math.PI / 180);
-                    return (
-                      <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight="bold">
-                        {typeof value === 'number' && value > 0 ? `${value}%` : ''}
-                      </text>
-                    );
-                  }}>
-                    {dynamicMemoryData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Memory Breakdown</h3>
+                <p className="text-sm text-slate-500">Concentric Episodic & Retrieval Tracks</p>
+              </div>
+              <div className="flex items-center gap-1.5 bg-slate-50 text-slate-600 px-2.5 py-1 rounded-full text-xs font-semibold border border-slate-200">
+                <Brain className="w-3.5 h-3.5 text-primary-600" /> 0–100% Scales
+              </div>
             </div>
-            <div className="space-y-3 mt-auto">
-              {dynamicMemoryData.map((item) => (
-                <div key={item.name} className="flex justify-between items-center text-sm">
-                  <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} /><span>{item.name}</span></div>
-                  <span className="font-bold">{item.value}%</span>
-                </div>
-              ))}
+
+            {/* Concentric Multi-Ring Activity Gauge */}
+            <div className="relative w-full aspect-square max-w-[230px] mx-auto my-2 flex items-center justify-center">
+              <svg viewBox="0 0 220 220" className="w-full h-full transform -rotate-90">
+                {memoryItems.map((item) => {
+                  const val = item.value ?? 0;
+                  const pct = Math.min(100, Math.max(0, val));
+                  const strokeOffset = item.value === null ? item.circumference : item.circumference - (pct / 100) * item.circumference;
+
+                  return (
+                    <g key={item.id}>
+                      {/* Background Track (100% capacity) */}
+                      <circle
+                        cx="110"
+                        cy="110"
+                        r={item.radius}
+                        stroke="#f1f5f9"
+                        strokeWidth="8"
+                        fill="none"
+                      />
+                      {/* Active Arc with smooth animation */}
+                      {item.value !== null && item.value > 0 && (
+                        <circle
+                          cx="110"
+                          cy="110"
+                          r={item.radius}
+                          stroke={item.color}
+                          strokeWidth="8"
+                          fill="none"
+                          strokeDasharray={item.circumference}
+                          strokeDashoffset={strokeOffset}
+                          strokeLinecap="round"
+                          className="transition-all duration-1000 ease-out"
+                        />
+                      )}
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Center Metrics Overlay */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                <span className="text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-none">
+                  {validMemoryScores.length > 0 ? `${avgMemoryScore}%` : 'N/A'}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                  Memory Index
+                </span>
+                <span className={`mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${getMemoryStatus(validMemoryScores.length > 0 ? avgMemoryScore : null).badge}`}>
+                  {getMemoryStatus(validMemoryScores.length > 0 ? avgMemoryScore : null).label}
+                </span>
+              </div>
+            </div>
+
+            {/* Precision Micro-Metrics Breakdown */}
+            <div className="space-y-3.5 mt-auto pt-3">
+              {memoryItems.map((item) => {
+                const status = getMemoryStatus(item.value);
+                return (
+                  <div key={item.id} className="group">
+                    <div className="flex justify-between items-center text-sm mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: item.color }} />
+                        <div>
+                          <span className="font-bold text-slate-800 text-xs block leading-tight">{item.name}</span>
+                          <span className="text-[10px] text-slate-400 font-medium block leading-none">{item.domain}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${status.badge}`}>
+                          {status.label}
+                        </span>
+                        <span className="font-extrabold text-slate-900 text-sm min-w-[36px] text-right">
+                          {item.value !== null ? `${item.value}%` : '—'}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Micro Progress Bar with 70% Clinical Threshold Mark */}
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden relative">
+                      <div
+                        className="h-full rounded-full transition-all duration-700 ease-out"
+                        style={{
+                          width: `${item.value ?? 0}%`,
+                          backgroundColor: item.color,
+                        }}
+                      />
+                      {/* Clinical Cutoff Marker (at 70%) */}
+                      <div 
+                        className="absolute top-0 bottom-0 w-[1.5px] bg-slate-300 z-10" 
+                        style={{ left: '70%' }} 
+                        title="Normal Cutoff: 70%"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
 
